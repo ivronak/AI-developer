@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Users &amp; log · AI Project Dashboard</title>
+  <script>try { var t = localStorage.getItem("apd.theme"); if (t) document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="assets/css/tokens.css">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/app.css">
+  <link rel="stylesheet" href="assets/css/ui.css">
+  <link rel="stylesheet" href="assets/css/users.css">
+  <script src="assets/js/data.js" defer></script>
+  <script src="assets/js/app.js" defer></script>
+  <script src="assets/js/shell.js" defer></script>
+  <script src="assets/js/users.js" defer></script>
+</head>
+<body data-page="users" data-owner-only>
+  <main class="page">
+    <div class="section-head">
+      <div class="page-head">
+        <h1>Users &amp; log</h1>
+        <p>Each person has their own sign-in. Nobody shares an account.</p>
+      </div>
+      <button class="btn btn-primary" type="button" id="add-user">Add user</button>
+    </div>
+
+    <div class="users" id="users"></div>
+
+    <section class="log-sec">
+      <div class="section-head"><h2>Activity log</h2><span class="hint" id="log-count"></span></div>
+      <div class="filters">
+        <div class="field"><label for="l-user">Person</label><select id="l-user"><option value="">Everyone</option></select></div>
+        <div class="field"><label for="l-project">Project</label><select id="l-project"><option value="">All projects</option></select></div>
+        <div class="field"><label for="l-from">From</label><input id="l-from" type="date"></div>
+        <div class="field"><label for="l-to">To</label><input id="l-to" type="date"></div>
+      </div>
+      <div class="rows" id="log"></div>
+    </section>
+  </main>
+</body>
+</html>

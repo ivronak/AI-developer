@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Dashboard Tour</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@500;600&display=swap">
+  <link rel="stylesheet" href="assets/css/tokens.css">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/tour.css">
+  <script src="assets/js/tour.js" defer></script>
+</head>
+<body>
+  <div class="stage" id="stage">
+    <iframe id="screen" title="Dashboard demo" src="about:blank"></iframe>
+    <div class="ring" id="ring" hidden></div>
+    <div class="cursor" id="cursor" hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 2l16 11.5-7 1.2 4.2 7.3-3 1.7-4.2-7.3L5 21z" fill="#111" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>
+      <span class="click" id="click"></span>
+    </div>
+  </div>
+
+  <div class="caption" id="caption" hidden>
+    <div class="cap-step" id="cap-step">1 / 6</div>
+    <p class="cap-text" id="cap-text"></p>
+    <div class="cap-bar"><span id="cap-bar"></span></div>
+    <button class="btn btn-sm" type="button" id="stop">Stop</button>
+  </div>
+
+  <div class="start" id="start">
+    <div class="start-card">
+      <span class="start-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 7h14M5 12h10M5 17h6"/></svg></span>
+      <h1>AI Project Dashboard</h1>
+      <p>A one-minute guided tour with voice. The mouse moves through the real mock-up by itself.</p>
+      <button class="btn btn-primary" type="button" id="go">▶ Start tour</button>
+      <p class="hint" id="start-note">Turn the sound on. The demo data is reset at the start.</p>
+    </div>
+  </div>
+</body>
+</html>

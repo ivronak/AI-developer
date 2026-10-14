@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Projects · AI Project Dashboard</title>
+  <script>try { var t = localStorage.getItem("apd.theme"); if (t) document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="assets/css/tokens.css">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/app.css">
+  <link rel="stylesheet" href="assets/css/ui.css">
+  <link rel="stylesheet" href="assets/css/projects.css">
+  <script src="assets/js/data.js" defer></script>
+  <script src="assets/js/app.js" defer></script>
+  <script src="assets/js/shell.js" defer></script>
+  <script src="assets/js/projects.js" defer></script>
+</head>
+<body data-page="projects" data-crumb="Overview">
+  <main class="page">
+    <div class="toolbar">
+      <div class="search">
+        <span aria-hidden="true" id="search-icon"></span>
+        <input id="q" type="search" placeholder="Search projects or clients…" autocomplete="off" aria-label="Search projects or clients" data-find>
+      </div>
+      <div class="view-toggle" role="group" aria-label="View">
+        <button type="button" data-view="grid" aria-label="Card view" aria-pressed="true"></button>
+        <button type="button" data-view="list" aria-label="List view" aria-pressed="false"></button>
+      </div>
+      <button class="btn btn-primary" type="button" id="add-new">Add New…</button>
+    </div>
+
+    <div class="kpis" id="kpis" role="group" aria-label="Summary — tap to filter"></div>
+
+    <div class="panels">
+      <section class="ov-card panel" aria-labelledby="h-health">
+        <div class="ov-head"><h2 id="h-health"><span class="h-ic" style="--h:150" data-icon="activity"></span>Health</h2><span class="hint">Checked 2 min ago</span></div>
+        <div class="hbar" id="hbar" aria-hidden="true"></div>
+        <div class="hcounts" id="hcounts"></div>
+        <ul class="att-list panel-scroll" id="attention"></ul>
+      </section>
+
+      <section class="ov-card panel" aria-labelledby="h-act">
+        <div class="ov-head"><h2 id="h-act"><span class="h-ic" style="--h:265" data-icon="sync"></span>Activity log</h2><a class="hint-link" href="users.html#log" id="log-link">Full log →</a></div>
+        <ul class="act-list panel-scroll" id="activity"></ul>
+      </section>
+
+      <section class="ov-card panel" aria-labelledby="h-appr">
+        <div class="ov-head"><h2 id="h-appr"><span class="h-ic" style="--h:215" data-icon="check"></span>Approvals</h2>
+          <div class="seg-sm" role="group" aria-label="Approval list" id="appr-tabs"></div></div>
+        <ul class="appr-list panel-scroll" id="approvals"></ul>
+      </section>
+    </div>
+
+    <div class="overview">
+      <section class="ov-main" aria-labelledby="h-projects">
+        <div class="ov-main-head">
+          <h2 id="h-projects">Projects</h2>
+          <div class="tabs-sm" role="group" aria-label="Filter projects" id="chips"></div>
+        </div>
+        <p class="scope-note" id="scope-note" hidden></p>
+        <div id="grid"></div>
+        <div class="empty" id="empty" hidden>No projects match. Clear the search or pick another filter.</div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Backups · AI Project Dashboard</title>
+  <script>try { var t = localStorage.getItem("apd.theme"); if (t) document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="assets/css/tokens.css">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/app.css">
+  <link rel="stylesheet" href="assets/css/ui.css">
+  <script src="assets/js/data.js" defer></script>
+  <script src="assets/js/app.js" defer></script>
+  <script src="assets/js/shell.js" defer></script>
+  <script src="assets/js/backups-ui.js" defer></script>
+  <script src="assets/js/backups.js" defer></script>
+</head>
+<body data-page="backups">
+  <main class="page">
+    <div class="section-head">
+      <div class="page-head">
+        <h1>Backups</h1>
+        <p id="head-sub">—</p>
+      </div>
+      <button class="btn btn-primary" type="button" id="backup-now">Back up now</button>
+    </div>
+
+    <div class="kpis k4" id="b-kpis"></div>
+
+    <div class="now-strip" id="fail-strip" hidden></div>
+
+    <div class="filters">
+      <div class="field">
+        <label for="f-project">Project</label>
+        <select id="f-project"><option value="">All projects</option></select>
+      </div>
+      <div class="field">
+        <label for="f-type">Type</label>
+        <select id="f-type">
+          <option value="">All types</option>
+          <option value="db">Database</option>
+          <option value="files">Uploaded files</option>
+          <option value="snapshot">Snapshots before Go Live</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="f-status">Status</label>
+        <select id="f-status">
+          <option value="">All</option>
+          <option value="failed">Failed only</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="rows" id="list"></div>
+    <p class="hint" id="more-note" hidden></p>
+  </main>
+</body>
+</html>

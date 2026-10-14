@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Sign in · AI Project Dashboard</title>
+  <script>try { var t = localStorage.getItem("apd.theme"); if (t) document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="assets/css/tokens.css">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/ui.css">
+  <link rel="stylesheet" href="assets/css/login.css">
+  <script src="assets/js/data.js" defer></script>
+  <script src="assets/js/app.js" defer></script>
+  <script src="assets/js/login.js" defer></script>
+</head>
+<body>
+  <div class="theme-corner">
+    <button class="icon-btn" type="button" data-theme-toggle aria-label="Switch light / dark theme"></button>
+  </div>
+
+  <main class="login-page">
+    <div class="login-wrap">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 7h14M5 12h10M5 17h6"/></svg>
+        </div>
+        <div>
+          <div class="brand-name">AI Project Dashboard</div>
+          <div class="brand-tag">beta → approval → live</div>
+        </div>
+      </div>
+
+      <section class="login-card" aria-live="polite">
+        <div class="steps" aria-hidden="true"><span class="on" id="step1-bar"></span><span id="step2-bar"></span></div>
+
+        <!-- Step 1: email/mobile + password -->
+        <div id="step-password">
+          <form id="form-password" novalidate>
+            <div class="login-head">
+              <h1>Sign in</h1>
+              <p class="muted">Use your own account. Accounts are never shared.</p>
+            </div>
+            <div class="msg msg-bad" id="pw-error" hidden></div>
+            <div class="field">
+              <label for="login-id">Email or mobile</label>
+              <input id="login-id" name="login" type="text" autocomplete="username" placeholder="you@company.com" required>
+            </div>
+            <div class="field">
+              <label for="login-pw">Password</label>
+              <div class="pw-wrap">
+                <input id="login-pw" name="password" type="password" autocomplete="current-password" required>
+                <button class="icon-btn" type="button" id="pw-show" aria-label="Show password"></button>
+              </div>
+            </div>
+            <button class="btn btn-primary btn-block" type="submit" id="pw-submit">Continue</button>
+          </form>
+        </div>
+
+        <!-- Step 2: OTP -->
+        <div id="step-otp" hidden>
+          <form id="form-otp" novalidate>
+            <div class="login-head">
+              <h1>Enter the code</h1>
+              <p class="muted">We sent a 6-digit code to <strong id="otp-target">—</strong>.</p>
+            </div>
+            <div class="msg msg-bad" id="otp-error" hidden></div>
+            <div class="field">
+              <label for="otp">One-time code</label>
+              <input id="otp" class="otp-input" name="otp" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required>
+            </div>
+            <button class="btn btn-primary btn-block" type="submit" id="otp-submit">Verify and sign in</button>
+            <div class="otp-meta">
+              <button class="link-btn" type="button" id="otp-back">← Use another account</button>
+              <button class="link-btn" type="button" id="otp-resend" disabled>Resend in 30s</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Locked -->
+        <div id="step-locked" hidden>
+          <div class="login-head">
+            <h1>Sign-in locked</h1>
+            <p class="muted">Too many wrong attempts. Try again in <strong class="mono" id="lock-left">15:00</strong>. The owner has been alerted.</p>
+          </div>
+        </div>
+      </section>
+
+      <aside class="demo-box" aria-label="Demo accounts">
+        <div class="label">Demo accounts (mock only)</div>
+        <div class="demo-row">
+          <button class="link-btn" type="button" data-demo="owner">Owner</button>
+          <span class="mono">owner@demo.test · demo1234</span>
+        </div>
+        <div class="demo-row">
+          <button class="link-btn" type="button" data-demo="dev">Developer</button>
+          <span class="mono">dev@demo.test · demo1234</span>
+        </div>
+        <div class="demo-row">
+          <span>Code: <span class="mono">123456</span> · 5 wrong tries = 15 min lock</span>
+          <button class="link-btn" type="button" id="demo-unlock">Reset lock</button>
+        </div>
+        <div class="demo-row">
+          <span>Changes you make are kept in this browser.</span>
+          <button class="link-btn" type="button" id="demo-reset">Reset demo data</button>
+        </div>
+      </aside>
+    </div>
+  </main>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+</body>
+</html>

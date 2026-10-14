@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Project · AI Project Dashboard</title>
+  <script>try { var t = localStorage.getItem("apd.theme"); if (t) document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="assets/css/tokens.css">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/app.css">
+  <link rel="stylesheet" href="assets/css/ui.css">
+  <link rel="stylesheet" href="assets/css/project.css">
+  <script src="assets/js/data.js" defer></script>
+  <script src="assets/js/app.js" defer></script>
+  <script src="assets/js/shell.js" defer></script>
+  <script src="assets/js/backups-ui.js" defer></script>
+  <script src="assets/js/project.js" defer></script>
+</head>
+<body data-page="projects">
+  <main class="page" id="main">
+    <section class="hero" id="hero">
+      <span class="pav" id="p-av">—</span>
+      <div class="hero-id">
+        <h1 id="p-name">—</h1>
+        <div class="hero-sub" id="p-sub">—</div>
+      </div>
+      <div class="hero-side">
+        <div class="hero-chips" id="p-chips"></div>
+        <span class="hpill" id="p-pill">—</span>
+      </div>
+    </section>
+    <div class="pc-now" id="p-now" hidden></div>
+
+    <div class="kpis k4" id="p-kpis"></div>
+
+    <section class="envs" aria-label="Environments">
+      <article class="env">
+        <div class="env-top"><span class="env-name"><span class="h-ic" style="--h:215" data-icon="sync"></span>Beta · test site</span><span class="mono env-commit" id="beta-commit">—</span></div>
+        <a class="env-url mono" id="beta-url" target="_blank" rel="noopener">—</a>
+        <p class="env-meta" id="beta-meta">—</p>
+      </article>
+      <article class="env env-live">
+        <div class="env-top"><span class="env-name"><span class="h-ic" style="--h:150" data-icon="rocket"></span>Live · real users</span><span class="mono env-commit" id="live-commit">—</span></div>
+        <a class="env-url mono" id="live-url" target="_blank" rel="noopener">—</a>
+        <p class="env-meta" id="live-meta">—</p>
+      </article>
+    </section>
+
+    <section class="actions" aria-label="Project actions">
+      <button class="btn" type="button" id="act-sync" data-icon="sync">Live → Beta sync</button>
+      <button class="btn" type="button" id="act-deploy" data-icon="upload">Beta deploy</button>
+      <button class="btn btn-primary" type="button" id="act-live" data-icon="rocket">Go Live</button>
+      <button class="btn" type="button" id="act-rollback" data-icon="undo">Rollback</button>
+    </section>
+    <p class="hint" id="owner-note" hidden>Go Live and Rollback are owner-only.</p>
+
+    <nav class="tabs" role="tablist" aria-label="Project sections" id="tabs">
+      <button type="button" role="tab" data-tab="chat">Chat</button>
+      <button type="button" role="tab" data-tab="changes">Changes</button>
+      <button type="button" role="tab" data-tab="deploys">Deploys</button>
+      <button type="button" role="tab" data-tab="backups">Backups</button>
+      <button type="button" role="tab" data-tab="settings">Settings</button>
+    </nav>
+
+    <section class="tab-panel" id="panel"></section>
+  </main>
+</body>
+</html>

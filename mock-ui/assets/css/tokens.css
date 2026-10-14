@@ -1,0 +1,111 @@
+/* Layout: Vercel-style console — fixed left sidebar on desktop (240px), main area with a 300px side column + project grid;
+   phones get a top bar + bottom tab bar and one column. Monochrome UI, colour only for status. */
+:root {
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --surface-2: #f2f2f2;
+  --line: #e8e8e8;
+  --line-strong: #d4d4d4;
+  --fg: #171717;
+  --muted: #666666;
+  --faint: #8f8f8f;
+
+  /* primary actions: indigo; project cards get their own hue (see colour layers below) */
+  --accent: #4f46e5;
+  --accent-soft: #eef0ff;
+  --accent-fg: #ffffff;
+  --link: #0068d6;
+
+  /* health (semantic) */
+  --ok: #0a7d3e;
+  --ok-soft: #e5f5ea;
+  --warn: #a35200;
+  --warn-soft: #fff1dc;
+  --bad: #d93036;
+  --bad-soft: #ffe8e8;
+  --info: #0068d6;
+  --info-soft: #e6f0fc;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 2px 8px rgba(0, 0, 0, .04);
+  --shadow-pop: 0 4px 12px rgba(0, 0, 0, .08), 0 16px 40px rgba(0, 0, 0, .10);
+  --focus: 0 0 0 2px var(--bg), 0 0 0 4px rgba(0, 104, 214, .55);
+
+  --font-ui: "Geist", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --tap: 40px;
+  --side-w: 240px;
+
+  /* project colour layers: hsl(var(--h) ...) with these saturation / lightness steps */
+  --band-s: 90%; --band-l: 96%;
+  --tint-s: 80%; --tint-l: 92%;
+  --solid-s: 65%; --solid-l: 50%;
+  --ink-s: 70%; --ink-l: 32%;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --surface-2: #1a1a1a;
+    --line: #262626;
+    --line-strong: #3a3a3a;
+    --fg: #ededed;
+    --muted: #a1a1a1;
+    --faint: #737373;
+    --accent: #818cf8;
+    --accent-soft: #1e1f3d;
+    --accent-fg: #0a0a0a;
+    --link: #52a8ff;
+    --ok: #3ecf73;
+    --ok-soft: #0f2a1a;
+    --warn: #f5a524;
+    --warn-soft: #2e2005;
+    --bad: #ff6166;
+    --bad-soft: #2f1214;
+    --info: #52a8ff;
+    --info-soft: #0f2238;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .5);
+    --shadow-pop: 0 8px 30px rgba(0, 0, 0, .6);
+    --focus: 0 0 0 2px var(--bg), 0 0 0 4px rgba(82, 168, 255, .6);
+    --band-s: 45%; --band-l: 13%;
+    --tint-s: 45%; --tint-l: 20%;
+    --solid-s: 70%; --solid-l: 58%;
+    --ink-s: 85%; --ink-l: 78%;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0a0a0a;
+  --surface: #111111;
+  --surface-2: #1a1a1a;
+  --line: #262626;
+  --line-strong: #3a3a3a;
+  --fg: #ededed;
+  --muted: #a1a1a1;
+  --faint: #737373;
+  --accent: #818cf8;
+  --accent-soft: #1e1f3d;
+  --accent-fg: #0a0a0a;
+  --link: #52a8ff;
+  --ok: #3ecf73;
+  --ok-soft: #0f2a1a;
+  --warn: #f5a524;
+  --warn-soft: #2e2005;
+  --bad: #ff6166;
+  --bad-soft: #2f1214;
+  --info: #52a8ff;
+  --info-soft: #0f2238;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .5);
+  --shadow-pop: 0 8px 30px rgba(0, 0, 0, .6);
+  --focus: 0 0 0 2px var(--bg), 0 0 0 4px rgba(82, 168, 255, .6);
+  --band-s: 45%; --band-l: 13%;
+  --tint-s: 45%; --tint-l: 20%;
+  --solid-s: 70%; --solid-l: 58%;
+  --ink-s: 85%; --ink-l: 78%;
+  color-scheme: dark;
+}
