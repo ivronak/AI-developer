@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+  <section class="card" style="max-width:560px">
+    <h2><span class="h-ic" style="--h:150">{{ icon('check') }}</span>Your recovery codes</h2>
+    <p>If you lose your phone, sign in with one of these instead of the app code. <strong>Each works once.</strong> Save them somewhere safe now — this page shows them only this one time.</p>
+    <div class="codes">{% for c in codes %}<span>{{ c }}</span>{% endfor %}</div>
+    <div class="chip-row">
+      <button class="btn" type="button" data-copy-codes="{{ codes|join(' ') }}">{{ icon('copy') }}Copy all</button>
+      <a class="btn btn-primary" href="{{ url_for('main.projects') }}">I saved them — continue</a>
+    </div>
+  </section>
+  <script>
+    document.addEventListener("click", function (e) {
+      var b = e.target.closest("[data-copy-codes]");
+      if (!b) return;
+      try { navigator.clipboard.writeText(b.getAttribute("data-copy-codes")).then(function () { UI.toast("Copied."); }); } catch (err) {}
+    });
+  </script>
+{% endblock %}

@@ -1,0 +1,673 @@
+#!/usr/bin/env python3
+"""AI Project Dashboard: keep our server-side work from being silently overwritten.
+
+Why this exists: the dashboard's code was first deployed with `deploy/deploy.sh` from another computer (a Mac), which makes the
+server's code IDENTICAL to that computer's copy and deletes whatever else is on the server. Work done directly on the server (the
+model picker, project notes, approval cards, …) is not in that copy, so the next deploy from it would erase it — and a database
+migration that the other copy doesn't know would stop that deploy half way. The dashboard's source is not on GitHub either.
+
+What this tool does (runs as root, lives OUTSIDE the app folder so a deploy can't remove it):
+  save SOURCE "message" [--force]
+                          checkpoint: SOURCE (the complete source, tests included) must equal what is deployed; it is committed to a
+                          git repo in /var/lib/aidash-source and remembered as the last known good state. Run it after EVERY deploy.
+                          It says what changed since the last checkpoint and REFUSES (unless --force) when files or database
+                          migrations that the last checkpoint had are gone — that is what a deploy from an older copy looks like.
+  check                   (every 5 minutes, by ai-dashboard-guard.timer) compare the deployed code with the checkpoint, the database's
+                          migration head with the code's migrations, the saved git copy, and the login page; on a problem raise ONE
+                          alert per kind of problem (the dashboard's bell, Telegram when it is set up) and write
+                          /etc/ai-dashboard/code-guard.json for the Settings page.
+  restore [REV] [--dry-run]  put a checkpoint's code back (backups of the code and the database first, packages installed, only this
+                          app is restarted, automatic rollback if it does not come up). Refuses when it would leave the database
+                          ahead of the code.
+  status                  print the saved state.
+It never changes the app by itself: an alert is a question to a person, not an order."""
+import datetime
+import fcntl
+import hashlib
+import io
+import json
+import os
+import re
+import shutil
+import signal
+import sqlite3
+import stat
+import subprocess
+import sys
+import tarfile
+import tempfile
+import time
+import urllib.error
+import urllib.request
+
+APP = "/home/aided.ivinfotech.com/app"
+SITE_USER = "aided5498"
+SRC = "/var/lib/aidash-source"
+STATE = SRC + "/state.json"
+STATUS_OUT = "/etc/ai-dashboard/code-guard.json"
+STATUS_GROUP = "aided5498"
+BACKUP_DIR = "/root"
+STAGE_PARENT = "/run/aidash-guard"               # work folders the site user can read (it runs the rsync); only root can create things in /run
+HEALTH_URL = "http://127.0.0.1:5090/login"
+HEALTH_RETRY_WAIT = 5                            # one failed probe is not a problem; two in a row are
+DEPLOYING = "/run/aidash-deploying"              # a deploy that touches this file is not alarming for 30 minutes
+DEPLOY_WINDOW = 30 * 60
+SKIP_DIRS = {"venv", "instance", "__pycache__", ".git", "node_modules", ".pytest_cache", ".mypy_cache"}
+SKIP_FILES = {".DS_Store"}
+SKIP_SUFFIXES = (".pyc", ".swp", ".swo", "~")
+RSYNC_NOISE = ["--exclude=__pycache__", "--exclude=*.pyc", "--exclude=venv", "--exclude=instance", "--exclude=.git", "--exclude=node_modules",
+               "--exclude=.pytest_cache", "--exclude=.mypy_cache", "--exclude=.DS_Store", "--exclude=*.swp", "--exclude=*.swo", "--exclude=*~"]
+VENV_PY = APP + "/venv/bin/python"
+DB = APP + "/instance/app.db"
+
+
+def log(msg):
+    print(f"aidash-code-guard: {msg}", flush=True)
+
+
+def now_iso():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# ---------------------------------------------------------------- one command at a time
+class Lock:
+    """All commands that change the state (check, save, restore) take turns: a check that is still alerting must not write an old
+    state over a checkpoint that `save` has just made."""
+
+    def __init__(self):
+        self.f = None
+
+    def acquire(self, blocking=True):
+        os.makedirs(SRC, mode=0o700, exist_ok=True)
+        self.f = open(SRC + "/.lock", "a")
+        try:
+            fcntl.flock(self.f, fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
+        except OSError:
+            self.f.close()
+            self.f = None
+            return False
+        return True
+
+    def release(self):
+        if self.f:
+            fcntl.flock(self.f, fcntl.LOCK_UN)
+            self.f.close()
+            self.f = None
+
+
+# ---------------------------------------------------------------- trees
+def files_map(root, skip_tests=False):
+    """{relative path: sha256} of every source file under root (no venv, instance, caches, editor leftovers)."""
+    out = {}
+    for top, dirs, files in os.walk(root):
+        dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and not (skip_tests and top == root and d == "tests"))
+        for name in files:
+            if name in SKIP_FILES or name.endswith(SKIP_SUFFIXES):
+                continue
+            path = os.path.join(top, name)
+            if os.path.islink(path):
+                continue
+            h = hashlib.sha256()
+            try:
+                fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)     # never wait on a pipe, never follow a link swapped in just now
+            except OSError:                       # gone while we looked (a deploy is copying): it simply is not there
+                continue
+            try:
+                if not stat.S_ISREG(os.fstat(fd).st_mode):       # a FIFO or device left in the folder: not source code, and reading it could hang this tool
+                    continue
+                with os.fdopen(fd, "rb", closefd=False) as f:
+                    for chunk in iter(lambda: f.read(1 << 20), b""):
+                        h.update(chunk)
+            except OSError:
+                continue
+            finally:
+                os.close(fd)
+            out[os.path.relpath(path, root).replace(os.sep, "/")] = h.hexdigest()
+    return out
+
+
+def tree_hash(fmap):
+    return hashlib.sha256("\n".join(f"{k}:{v}" for k, v in sorted(fmap.items())).encode()).hexdigest()
+
+
+def compare(checkpoint, deployed):
+    """(missing, different, new): files the checkpoint has that the server lacks / that differ / that the server has extra."""
+    missing = sorted(k for k in checkpoint if k not in deployed)
+    different = sorted(k for k in checkpoint if k in deployed and checkpoint[k] != deployed[k])
+    new = sorted(k for k in deployed if k not in checkpoint)
+    return missing, different, new
+
+
+def migration_graph(app_dir):
+    """(revisions, revisions that some other revision follows) of the migrations that the code on disk has."""
+    revs, downs = set(), set()
+    folder = os.path.join(app_dir, "migrations", "versions")
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return revs, downs
+    for name in names:
+        if not name.endswith(".py"):
+            continue
+        try:
+            with open(os.path.join(folder, name), encoding="utf-8", errors="replace") as f:
+                text = f.read()
+        except OSError:
+            continue
+        m = re.search(r"^revision\s*=\s*['\"]([0-9a-zA-Z_]+)['\"]", text, re.M)
+        if m:
+            revs.add(m.group(1))
+            d = re.search(r"^down_revision\s*=\s*(.+)$", text, re.M)
+            if d:
+                downs.update(re.findall(r"['\"]([0-9a-zA-Z_]+)['\"]", d.group(1)))
+    return revs, downs
+
+
+def code_revisions(app_dir):
+    """The migration revision ids that the code on disk knows."""
+    return migration_graph(app_dir)[0]
+
+
+def code_heads(app_dir):
+    revs, downs = migration_graph(app_dir)
+    return revs - downs
+
+
+def db_head(db=None):
+    try:
+        c = sqlite3.connect(f"file:{db or DB}?mode=ro", uri=True, timeout=10)
+        try:
+            return c.execute("select version_num from alembic_version").fetchone()[0]
+        finally:
+            c.close()
+    except (sqlite3.Error, TypeError):
+        return None
+
+
+def health(url=None):
+    try:
+        with urllib.request.urlopen(url or HEALTH_URL, timeout=10) as r:
+            return r.status
+    except urllib.error.HTTPError as e:
+        return e.code
+    except Exception:
+        return 0
+
+
+# ---------------------------------------------------------------- state
+def load_state():
+    try:
+        with open(STATE, encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_state(state):
+    os.makedirs(SRC, mode=0o700, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=SRC, prefix=".state-")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=1)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, STATE)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def git(*args, check=True):
+    r = subprocess.run(["git", "-c", "user.name=AI Dashboard guard", "-c", "user.email=guard@localhost", "-C", SRC] + list(args),
+                       capture_output=True, text=True)
+    if check and r.returncode != 0:
+        raise RuntimeError(f"git {args[0]} failed: {(r.stderr or r.stdout).strip()[-300:]}")
+    return r.stdout.strip()
+
+
+def git_ok(*args):
+    return subprocess.run(["git", "-C", SRC] + list(args), capture_output=True).returncode == 0
+
+
+# ---------------------------------------------------------------- alerts
+def alert(message):
+    """One alert into the dashboard's bell (the table old versions of the dashboard read too), and Telegram when it is set up.
+    Returns True when the bell row was written (a False is retried at the next check)."""
+    message = message[:250]
+    log("ALERT: " + message)
+    code = ("import sqlite3,sys,datetime;c=sqlite3.connect(sys.argv[1],timeout=20);"
+            "c.execute(\"insert into alerts (project_id,kind,message,created_at) values (NULL,'error',?,?)\","
+            "(sys.argv[2],datetime.datetime.utcnow().isoformat(' ')));c.commit()")
+    ok = True
+    try:
+        subprocess.run(["runuser", "-u", SITE_USER, "--", "python3", "-c", code, DB, message], check=True, capture_output=True, timeout=60)
+    except Exception as e:
+        ok = False
+        log(f"could not put the alert in the dashboard ({e.__class__.__name__})")
+    telegram(message)
+    return ok
+
+
+def telegram(message):
+    """Runs AS THE SITE USER: the dashboard's Python lives in a folder that user owns, and this tool is root — never run it as root."""
+    snippet = r'''
+import json, os, sqlite3, sys, urllib.request
+env = {}
+for line in open("/etc/ai-dashboard/dashboard.env"):
+    if "=" in line and not line.lstrip().startswith("#"):
+        k, v = line.rstrip("\n").split("=", 1); env[k] = v.strip().strip("'\"")
+c = sqlite3.connect("file:%s?mode=ro" % sys.argv[1], uri=True)
+get = lambda k: (json.loads(c.execute("select value from app_settings where key=?", (k,)).fetchone()[0]) if c.execute("select 1 from app_settings where key=?", (k,)).fetchone() else None)
+tok, chats = get("telegram_token_enc"), get("telegram_chats") or []
+if not tok or not chats: sys.exit(0)
+from cryptography.fernet import Fernet
+token = Fernet(env["ENCRYPTION_KEY"].encode()).decrypt(tok.encode()).decode()
+for chat in chats:
+    req = urllib.request.Request("https://api.telegram.org/bot%s/sendMessage" % token, data=json.dumps({"chat_id": chat["id"], "text": sys.argv[2]}).encode(), headers={"Content-Type": "application/json"})
+    urllib.request.urlopen(req, timeout=15).read()
+'''
+    try:
+        subprocess.run(["runuser", "-u", SITE_USER, "--", VENV_PY, "-c", snippet, DB, "🛡 " + message], capture_output=True, timeout=60)
+    except Exception:
+        pass
+
+
+def write_status(status):
+    tmp = None
+    try:
+        import grp
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(STATUS_OUT), prefix=".code-guard-")
+        with os.fdopen(fd, "w") as f:
+            json.dump(status, f, indent=1)
+        os.chmod(tmp, 0o640)
+        os.chown(tmp, 0, grp.getgrnam(STATUS_GROUP).gr_gid)
+        os.replace(tmp, STATUS_OUT)
+        tmp = None
+    except Exception as e:
+        log(f"could not write the status file ({e.__class__.__name__})")
+    finally:
+        if tmp:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+
+# ---------------------------------------------------------------- check
+def _problems(state, app_dir=None):
+    """([(kind, text)], details) for the server as it is now. One alert per KIND, so a changing count never starts an alert storm."""
+    app_dir = app_dir or APP
+    cp = state.get("checkpoint")
+    found, detail = [], {}
+    if not cp:
+        return [("checkpoint", "No checkpoint of the dashboard's code exists yet (run: aidash-code-guard save SOURCE \"message\").")], detail
+    if cp.get("commit") and not git_ok("cat-file", "-e", str(cp["commit"]) + "^{commit}"):
+        found.append(("git", f"The git copy of the dashboard's code in {SRC} is damaged or gone: checkpoint {cp.get('commit')} cannot be read, so restore would not work."))
+    deployed = files_map(app_dir)
+    if tree_hash(deployed) != cp.get("deployed_hash"):
+        checkpoint = files_map(SRC + "/tree", skip_tests=True)
+        missing, different, new = compare(checkpoint, deployed)
+        detail.update(missing=missing[:20], different=different[:20], new=new[:20])
+        found.append(("code", f"The dashboard's code on the server no longer matches the last checkpoint ({cp.get('message', '')[:60]!r}): "
+                              f"{len(missing)} file(s) missing, {len(different)} different, {len(new)} new"
+                              + (f"; missing: {', '.join(missing[:4])}" if missing else "") + ". Restore: aidash-code-guard restore"))
+    head = db_head()
+    revs, downs = migration_graph(app_dir)
+    if head and revs:
+        if head not in revs:
+            found.append(("db", f"The database is at migration {head} but the code on the server has no such migration — a deploy would stop half way."))
+        elif head in downs:
+            found.append(("db", f"The database is at migration {head} but the code has newer migrations that were never applied — the code may use columns the database lacks."))
+    code = health()
+    if code != 200:
+        time.sleep(HEALTH_RETRY_WAIT)
+        code = health()
+    if code != 200:
+        found.append(("health", f"The dashboard's login page answers {code or 'nothing'} instead of 200."))
+    return found, detail
+
+
+def problems_now(state, app_dir=None):
+    """(list of problem texts, details) for the server as it is now."""
+    found, detail = _problems(state, app_dir)
+    return [text for _, text in found], detail
+
+
+def cmd_check(args=None):
+    try:
+        if os.path.exists(DEPLOYING) and time.time() - os.path.getmtime(DEPLOYING) < DEPLOY_WINDOW:
+            log("a deploy is in progress — skipping this check")
+            return 0
+    except OSError:
+        pass
+    state = load_state()
+    found, detail = _problems(state)
+    cp = state.get("checkpoint") or {}
+    write_status({"checked_at": now_iso(), "ok": not found, "problems": [t for _, t in found], "detail": detail,
+                  "checkpoint": {"commit": cp.get("commit", ""), "at": cp.get("at", ""), "message": cp.get("message", "")}})
+    kinds = {k for k, _ in found}
+    alerted = set(load_state().get("alerted_kinds") or [])
+    for kind, text in found:
+        if kind in alerted:
+            continue
+        if alert(text):
+            alerted.add(kind)
+            st = load_state()                                # reload: only `alerted_kinds` is ours to change
+            st["alerted_kinds"] = sorted(alerted & kinds)
+            save_state(st)
+    gone = alerted - kinds
+    if gone:
+        st = load_state()
+        st["alerted_kinds"] = sorted(alerted & kinds)
+        save_state(st)
+        if not kinds:
+            log("all clear again")
+    log("ok" if not found else f"{len(found)} problem(s)")
+    return 0 if not found else 1
+
+
+# ---------------------------------------------------------------- save
+def app_is_plain():
+    if os.path.islink(APP):
+        log(f"{APP} is a symbolic link — refusing to work on it (root must not follow a link the site user can change)")
+        return False
+    return True
+
+
+def cmd_save(args):
+    force = "--force" in args
+    args = [a for a in args if a != "--force"]
+    if len(args) < 2:
+        log('usage: aidash-code-guard save SOURCE_DIR "message" [--force]')
+        return 2
+    source, message = args[0], args[1]
+    if not os.path.isfile(os.path.join(source, "app", "__init__.py")):
+        log("SOURCE does not look like the dashboard (no app/__init__.py)")
+        return 2
+    if not app_is_plain():
+        return 1
+    want, have = files_map(source, skip_tests=True), files_map(APP, skip_tests=True)
+    missing, different, new = compare(want, have)
+    if missing or different or new:
+        log("SOURCE is not what is deployed — refusing to record it as the known good state. "
+            f"missing on the server: {missing[:5]}, different: {different[:5]}, only on the server: {new[:5]}")
+        return 1
+    os.makedirs(SRC, mode=0o700, exist_ok=True)
+    os.chmod(SRC, 0o700)
+    tree = SRC + "/tree"
+    state = load_state()
+    if state.get("checkpoint") and os.path.isdir(tree):          # what does this checkpoint lose compared with the last one?
+        prev = files_map(tree, skip_tests=True)
+        lost = sorted(k for k in prev if k not in want)
+        lost_revs = sorted(code_revisions(tree) - code_revisions(source))
+        added, changed = sum(1 for k in want if k not in prev), sum(1 for k in want if k in prev and want[k] != prev[k])
+        log(f"compared with the last checkpoint: {added} file(s) added, {changed} changed, {len(lost)} gone")
+        if (lost or lost_revs) and not force:
+            log("REFUSED: this looks like a deploy from an OLDER copy — it would drop "
+                + (f"{len(lost)} file(s) the last checkpoint has ({', '.join(lost[:8])}{' …' if len(lost) > 8 else ''})" if lost else "")
+                + (" and " if lost and lost_revs else "")
+                + (f"database migration(s) {', '.join(lost_revs)}" if lost_revs else "")
+                + ". If that is really what you want, run the same command with --force.")
+            return 1
+    if not os.path.isdir(SRC + "/.git"):
+        subprocess.run(["git", "init", "-q", SRC], check=True)
+    with open(SRC + "/.gitignore", "w") as f:                        # the state files change on every check: they are not history
+        f.write("/state.json\n/state.json.tmp\n/.state-*\n/.lock\n")          # anchored: a file called state.json inside tree/ is source code
+    os.makedirs(tree, exist_ok=True)
+    subprocess.run(["rsync", "-a", "--delete"] + RSYNC_NOISE + [source.rstrip("/") + "/", tree + "/"], check=True)
+    copied = files_map(tree)
+    if copied != files_map(source):                                   # tests included
+        log("the saved copy does not match SOURCE (something was copied wrongly) — nothing was recorded")
+        return 1
+    git("add", "-A")
+    if git("status", "--porcelain"):
+        git("commit", "-q", "-m", message)
+    held = {p for p in git("ls-files", "-z", "--", "tree").split("\0") if p}
+    if held != {"tree/" + k for k in copied}:                          # an ignore rule or a nested repo must not swallow files silently
+        lost = sorted({"tree/" + k for k in copied} - held)
+        log(f"git does not hold everything that was copied ({len(lost)} file(s) missing, e.g. {lost[:3]}) — the checkpoint is NOT valid")
+        return 1
+    commit = git("rev-parse", "--short", "HEAD")
+    state = load_state()
+    state["checkpoint"] = {"commit": commit, "at": now_iso(), "message": message, "deployed_hash": tree_hash(files_map(APP))}
+    state["alerted_kinds"] = []
+    save_state(state)
+    try:
+        os.unlink(DEPLOYING)
+    except OSError:
+        pass
+    log(f"checkpoint {commit} saved: {message}")
+    return cmd_check()
+
+
+# ---------------------------------------------------------------- restore
+def run(cmd, timeout=900, **kw):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, **kw)
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(cmd, 124, "", f"timed out after {timeout} s")
+
+
+def as_site(script, timeout=900):
+    return run(["runuser", "-u", SITE_USER, "--", "bash", "-c",
+                f"umask 007; set -a; . /etc/ai-dashboard/dashboard.env; set +a; cd {APP}; {script}"], timeout=timeout, stdin=subprocess.DEVNULL)
+
+
+def rsync_as_site(args):
+    """rsync run AS THE SITE USER. The app folder belongs to that user, which can swap it (or a folder above it) for a link at any moment;
+    run as root, a swap between our check and the copy would let `--delete` reach elsewhere. Run as the site user it can only ever
+    reach what that user can reach anyway. (Files it writes are the site user's own: no chown needed.)"""
+    return run(["runuser", "-u", SITE_USER, "--", "rsync"] + args)
+
+
+def stage_dir():
+    """A fresh work folder that the site user can READ (it is the source of the rsync above)."""
+    os.makedirs(STAGE_PARENT, mode=0o755, exist_ok=True)
+    d = tempfile.mkdtemp(prefix="stage-", dir=STAGE_PARENT)
+    os.chmod(d, 0o755)
+    return d
+
+
+def backup_db(ts):
+    """A copy of the database before a restore may run migrations. Returns the file name, or "" if it could not be made."""
+    dest = f"{APP}/instance/backups/app-before-restore-{ts}.db"
+    code = ("import os,sqlite3,sys;os.umask(0o027);os.makedirs(os.path.dirname(sys.argv[2]),exist_ok=True);"
+            "s=sqlite3.connect('file:%s?mode=ro'%sys.argv[1],uri=True);d=sqlite3.connect(sys.argv[2]);s.backup(d);d.close();s.close()")
+    r = run(["runuser", "-u", SITE_USER, "--", "python3", "-c", code, DB, dest], timeout=300)
+    return dest if r.returncode == 0 else ""
+
+
+def save_package_list(ts):
+    """The list of installed Python packages before a restore changes them (a rollback restores code only; this is how to put the packages back)."""
+    r = as_site("venv/bin/pip freeze", timeout=120)
+    if r.returncode != 0 or not isinstance(r.stdout, str):
+        return ""
+    path = f"{BACKUP_DIR}/pip-freeze-before-restore-{ts}.txt"
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(r.stdout)
+        return path
+    except OSError:
+        return ""
+
+
+def finish_flag():
+    try:
+        os.unlink(DEPLOYING)
+    except OSError:
+        pass
+
+
+def cmd_restore(args):
+    dry = "--dry-run" in args
+    rev = next((a for a in args if not a.startswith("--")), "HEAD")
+    state = load_state()
+    if not state.get("checkpoint") or not os.path.isdir(SRC + "/.git"):
+        log("no checkpoint to restore")
+        return 1
+    if not app_is_plain():
+        return 1
+    tmp = stage_dir()
+    old_handlers = {}
+    try:
+        archive = subprocess.run(["git", "-C", SRC, "archive", "--format=tar", rev, "tree"], capture_output=True)
+        if archive.returncode != 0:
+            log("unknown revision: " + rev)
+            return 1
+        with tarfile.open(fileobj=io.BytesIO(archive.stdout)) as t:
+            t.extractall(tmp)
+        target = tmp + "/tree"
+        for need in ("app/__init__.py", "wsgi.py", "migrations/versions"):
+            if not os.path.exists(os.path.join(target, need)):
+                log(f"REFUSED: revision {rev} is not a complete dashboard (no {need}). Nothing was changed.")
+                return 1
+        want = files_map(target, skip_tests=True)
+        missing, different, new = compare(want, files_map(APP, skip_tests=True))
+        log(f"restoring {rev}: {len(missing)} file(s) come back, {len(different)} change, {len(new)} are removed")
+        for label, files in (("come back", missing), ("change", different), ("are removed", new)):
+            if files:
+                log(f"  {label}: {', '.join(files[:12])}{' …' if len(files) > 12 else ''}")
+        revs, head = code_revisions(target), db_head()
+        if head and revs and head not in revs:
+            log(f"REFUSED: the database is at migration {head}, which the checkpoint does not have. Restoring would leave the database "
+                "ahead of the code. Take a checkpoint that includes that migration first.")
+            return 1
+        if dry:
+            log("dry run: nothing was changed")
+            return 0
+        ts = time.strftime("%Y%m%d-%H%M%S")
+        backup = f"{BACKUP_DIR}/app-code-before-restore-{ts}.tgz"
+        made = run(["tar", "czf", backup, "-C", APP, "--exclude=./venv", "--exclude=./instance", "--exclude=__pycache__", "."])
+        if made.returncode != 0 or not os.path.exists(backup):
+            log("could not make a backup of the current code — nothing was changed")
+            return 1
+        os.chmod(backup, 0o600)
+        db_backup = backup_db(ts)
+        if not db_backup:
+            log("could not make a backup of the database — nothing was changed")
+            return 1
+        freeze_file = save_package_list(ts)
+
+        def interrupted(signum, frame):                       # a closed terminal / kill must not leave a half-copied app behind
+            raise KeyboardInterrupt(f"signal {signum}")
+        for sig in (signal.SIGHUP, signal.SIGTERM):
+            old_handlers[sig] = signal.signal(sig, interrupted)
+        open(DEPLOYING, "w").close()
+        try:
+            if not app_is_plain():                            # swapped for a link while we were preparing: touch nothing
+                finish_flag()
+                return 1
+            r = rsync_as_site(["-a", "--checksum", "--delete", "--exclude=/venv", "--exclude=/instance", "--exclude=/tests", "--exclude=__pycache__",
+                               target + "/", APP + "/"])
+            if r.returncode != 0:
+                log("rsync failed: " + r.stderr[-300:])
+                return rollback(backup, db_backup, freeze_file)
+            if files_map(APP, skip_tests=True) != want:
+                log("the code on the server is not what was restored (a file did not copy) — undoing")
+                return rollback(backup, db_backup, freeze_file)
+            if os.path.isfile(os.path.join(target, "requirements.txt")):
+                pip = as_site("venv/bin/pip install -q -r requirements.txt", timeout=1200)
+                if pip.returncode != 0:
+                    log("installing the packages failed: " + (pip.stderr or pip.stdout)[-300:])
+                    return rollback(backup, db_backup, freeze_file)
+            up = as_site("FLASK_APP=wsgi.py venv/bin/flask db upgrade", timeout=600)
+            if up.returncode != 0:
+                log("migration failed: " + (up.stderr or up.stdout)[-300:])
+                return rollback(backup, db_backup, freeze_file)
+            run(["systemctl", "restart", "ai-dashboard"])
+            for _ in range(15):
+                time.sleep(1)
+                if health() == 200:
+                    break
+            else:
+                log("the dashboard did not come up")
+                return rollback(backup, db_backup, freeze_file)
+        except (Exception, KeyboardInterrupt, SystemExit) as e:
+            log(f"restore failed or was interrupted ({e.__class__.__name__}: {str(e)[:200]}) — undoing")
+            return rollback(backup, db_backup, freeze_file)
+        finally:
+            for sig, handler in old_handlers.items():
+                signal.signal(sig, handler)
+        finish_flag()
+        log(f"restored {rev}. Backup of what was there: {backup}; database copy: {db_backup}"
+            + (f"; packages before: {freeze_file}" if freeze_file else ""))
+        try:                                  # the restore itself worked; now the books: the restored code becomes the current checkpoint
+            commit = git("rev-parse", "--short", rev)
+            message = git("log", "-1", "--format=%s", rev)
+            if commit != git("rev-parse", "--short", "HEAD"):
+                # an older checkpoint is now what runs: make it the newest one, so the saved copy and the running code are the same thing
+                subprocess.run(["rsync", "-a", "--delete"] + RSYNC_NOISE + [target + "/", SRC + "/tree/"], check=True)
+                git("add", "-A")
+                if git("status", "--porcelain"):
+                    git("commit", "-q", "-m", f"restore of {commit}: {message}")
+                commit, message = git("rev-parse", "--short", "HEAD"), f"restore of {commit}: {message}"
+            state = load_state()
+            state["checkpoint"] = {"commit": commit, "at": now_iso(), "message": message, "deployed_hash": tree_hash(files_map(APP))}
+            state["alerted_kinds"] = []
+            save_state(state)
+        except Exception as e:
+            log(f"the code is restored, but the checkpoint could not be updated ({e.__class__.__name__}) — run: aidash-code-guard save SOURCE \"message\"")
+            return 1
+        return cmd_check()
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def rollback(backup, db_backup="", freeze_file=""):
+    log("rolling back to what was there before")
+    if not app_is_plain():
+        log(f"ROLLBACK STOPPED: the app folder is now a link, so nothing was touched. Fix by hand from {backup}.")
+        finish_flag()
+        return 1
+    back = stage_dir()
+    try:
+        t = run(["tar", "xzf", backup, "-C", back])
+        if t.returncode != 0 or not os.path.isfile(os.path.join(back, "app", "__init__.py")):
+            log(f"ROLLBACK STOPPED: the backup could not be unpacked, so nothing more was changed. Fix by hand from {backup}.")
+            finish_flag()
+            return 1
+        r = rsync_as_site(["-a", "--delete", "--exclude=/venv", "--exclude=/instance", back + "/", APP + "/"])
+        if r.returncode != 0:
+            log(f"ROLLBACK COPY FAILED ({r.stderr[-200:]}). Fix by hand from {backup}.")
+        run(["systemctl", "restart", "ai-dashboard"])
+        time.sleep(4)
+    finally:
+        shutil.rmtree(back, ignore_errors=True)
+    finish_flag()
+    log(f"rolled back; the login page answers {health()}."
+        + (f" If the database looks wrong, the copy from before is {db_backup}." if db_backup else "")
+        + (f" If packages changed, the list from before is {freeze_file} (venv/bin/pip install -r that file)." if freeze_file else ""))
+    return 1
+
+
+def cmd_status(args=None):
+    print(json.dumps(load_state(), indent=1))
+    try:
+        print(open(STATUS_OUT).read())
+    except OSError:
+        pass
+    return 0
+
+
+def main(argv):
+    if len(argv) < 2 or argv[1] not in ("check", "save", "restore", "status"):
+        print(__doc__)
+        return 2
+    if argv[1] == "status":
+        return cmd_status()
+    lock = Lock()
+    if not lock.acquire(blocking=argv[1] != "check"):
+        log("another guard command is running — this check is skipped")
+        return 0
+    try:
+        return {"check": cmd_check, "save": cmd_save, "restore": cmd_restore}[argv[1]](argv[2:])
+    finally:
+        lock.release()
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

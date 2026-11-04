@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="page-head">
+    <h1>Claude accounts</h1>
+    <p>Every Claude that can work for you: which login it uses, what it can do, what it asks you first, and what it can't. Only the owner sees this page. <a href="{{ url_for('settings.index') }}#claude-code">Back to Settings</a></p>
+  </div>
+
+  <div class="card-grid">
+    {% for a in accounts %}
+      <section class="card" aria-labelledby="h-{{ a.key }}">
+        <div class="acc-head">
+          <h2 id="h-{{ a.key }}"><span class="h-ic" style="--h:{{ 200 + loop.index0 * 55 }}">{{ icon(a.icon) }}</span>{{ a.title }}</h2>
+          <span class="pill pill-{{ a.status[1] }}">{{ a.status[0] }}</span>
+          {% if a.in_use %}<span class="pill pill-accent">Default account</span>{% endif %}
+        </div>
+        <p class="hint">{{ a.about }}</p>
+        <dl class="acc-facts">
+          {% for k, v in a.facts %}<div><dt>{{ k }}</dt><dd>{{ v }}</dd></div>{% endfor %}
+        </dl>
+        <div class="acc-conn">
+          <strong>Connectors</strong>
+          {% if a.connectors %}
+            <div class="chip-row">{% for c in a.connectors %}<span class="pill pill-{{ 'ok' if c.status == 'connected' else ('warn' if c.status == 'needs-auth' else 'bad') }}">{{ c.name }}</span>{% endfor %}</div>
+            <span class="hint">Green works. Amber needs a sign-in on claude.ai first. Red could not connect.</span>
+          {% else %}
+            <span class="hint">{{ a.connectors_note }}</span>
+          {% endif %}
+        </div>
+        {% if a.error %}<p class="hint">{{ a.error }}</p>{% endif %}
+        {% for state, head, tone in [("yes", "Can do", "ok"), ("ask", "Asks you first (a card in the chat)", "warn"), ("no", "Can't do", "bad")] %}
+          {% if a.caps[state] %}
+            <div class="cap-group">
+              <h3><span class="pill pill-{{ tone }}">{{ head }}</span></h3>
+              <ul class="cap-list">
+                {% for it in a.caps[state] %}<li><span>{{ it.label }}</span>{% if it.note %}<small>{{ it.note }}</small>{% endif %}</li>{% endfor %}
+              </ul>
+            </div>
+          {% endif %}
+        {% endfor %}
+        {% if a.link %}
+          <p class="hint"><a href="{{ url_for(a.link[1]) }}#{{ a.link[2] }}">{{ a.link[0] }} →</a></p>
+        {% endif %}
+      </section>
+    {% endfor %}
+  </div>
+
+  <section class="card" aria-labelledby="h-auto">
+    <h2 id="h-auto"><span class="h-ic" style="--h:25">{{ icon('alert') }}</span>Things that happen without a card</h2>
+    <p class="hint">So nothing here surprises you. These run through the dashboard's own tools, with the default Claude account, and do not ask:</p>
+    <ul class="cap-list">
+      <li><span>On the BETA site Claude can run commands as the beta's own user (the beta is a copy, not your live site).</span></li>
+      <li><span>After a change is saved and its tests pass, the dashboard puts it on beta by itself. If the project has no beta yet, it first makes one — Claude builds the site — and copies your live data into it.</span></li>
+      <li><span>While you press Go Live and a release step fails, Claude may fix it by running install / build commands in the new release as the live site's own user, and it saves the corrected steps that later Go Lives replay.</span></li>
+      <li><span>Beta, release and live-steps runs have their own tool set (not the chat's) and use the default Claude account, with web search / fetch open.</span></li>
+    </ul>
+  </section>
+{% endblock %}

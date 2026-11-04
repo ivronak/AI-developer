@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block content %}
+  <section class="hero" style="--h:245">
+    <span class="pav">{{ current_user.initials }}</span>
+    <div class="hero-id">
+      <h1>{{ current_user.name }}</h1>
+      <div class="hero-sub"><span>{{ current_user.email }} · {{ current_user.mobile }}</span></div>
+    </div>
+    <div class="hero-side">
+      <span class="role-chip">{{ "Owner" if current_user.is_owner else "Developer" }}</span>
+      <span class="hpill {{ 's-ok' if current_user.totp_enabled else 's-warn' }}">{{ "Authenticator on" if current_user.totp_enabled else "Authenticator off" }}</span>
+    </div>
+  </section>
+
+  {% if current_user.is_owner %}
+  <a class="pc-now" href="{{ url_for('settings.index') }}" style="text-decoration:none;color:inherit">{{ icon('gear') }}<span>This page is only your own sign-in. GitHub and other dashboard connections are in <strong>Settings</strong> →<small>The ⚙️ icon in the top bar.</small></span></a>
+  {% endif %}
+  <div class="card-grid">
+    <section class="card" aria-labelledby="h-2fa">
+      <h2 id="h-2fa"><span class="h-ic" style="--h:150">{{ icon('check') }}</span>Authenticator app</h2>
+      {% if current_user.totp_enabled %}
+        <p>Every sign-in asks for the 6-digit code from your phone. {% if require_2fa %}The owner has made it required for everyone.{% endif %}</p>
+        <p class="hint">Recovery codes left: <strong>{{ current_user.recovery_codes|length }}</strong> of 8.</p>
+        <form method="post" action="{{ url_for('auth.account_2fa_codes') }}" class="form-grid">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="field"><label for="c1">Current code from the app</label><input id="c1" name="code" class="otp-small mono" inputmode="numeric" maxlength="6" autocomplete="one-time-code" required></div>
+          <div class="chip-row">
+            <button class="btn" type="submit">New recovery codes</button>
+            {% if not require_2fa %}
+              <button class="btn btn-danger" type="submit" formaction="{{ url_for('auth.account_2fa_off') }}">Turn authenticator off</button>
+            {% endif %}
+          </div>
+        </form>
+      {% elif qr %}
+        <div class="setup-2fa wide">
+          <div class="qr">{{ qr }}</div>
+          <div class="form-grid">
+            <ol class="summary-list">
+              <li>Open your authenticator app → <strong>+</strong> → <strong>Scan a QR code</strong>.</li>
+              <li>Scan the code, then type the 6 digits it shows.</li>
+            </ol>
+            <p class="hint">Can't scan? Type this key: </p><div class="secret">{{ secret }}</div>
+            <form method="post" action="{{ url_for('auth.account_2fa_confirm') }}" class="form-grid">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <div class="field"><label for="c2">Code from the app</label><input id="c2" name="code" class="otp-small mono" inputmode="numeric" maxlength="6" autocomplete="one-time-code" required autofocus></div>
+              <button class="btn btn-primary" type="submit">Turn on</button>
+            </form>
+          </div>
+        </div>
+      {% else %}
+        <p>Off. {% if require_2fa %}It is required — you will set it up at your next sign-in.{% else %}Turn it on for a safer sign-in.{% endif %}</p>
+        <form method="post" action="{{ url_for('auth.account_2fa_start') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-primary" type="submit">Set up authenticator</button>
+        </form>
+      {% endif %}
+    </section>
+
+    <section class="card" aria-labelledby="h-pw">
+      <h2 id="h-pw"><span class="h-ic" style="--h:245">{{ icon('users') }}</span>Change password</h2>
+      <form method="post" action="{{ url_for('auth.account_password') }}" class="form-grid">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="field"><label for="cur">Current password</label><input id="cur" name="current" type="password" autocomplete="current-password" required></div>
+        <div class="form-row two">
+          <div class="field"><label for="np">New password (10+ characters)</label><input id="np" name="password" type="password" autocomplete="new-password" minlength="10" required></div>
+          <div class="field"><label for="np2">Type it again</label><input id="np2" name="password2" type="password" autocomplete="new-password" minlength="10" required></div>
+        </div>
+        <div><button class="btn btn-primary" type="submit">Change password</button></div>
+        <p class="hint">Changing it signs you out on every other device.</p>
+      </form>
+    </section>
+  </div>
+{% endblock %}

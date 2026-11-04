@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/projects.css') }}">{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/projects.js') }}" defer></script>{% endblock %}
+{% macro ago_of(dt) %}{{ dt|ago if dt else "Never" }}{% endmacro %}
+{% block content %}
+  <div class="toolbar">
+    <div class="search">
+      {{ icon('search') }}
+      <input id="q" type="search" placeholder="Search projects or clients…" autocomplete="off" aria-label="Search projects or clients" data-find>
+    </div>
+    <div class="view-toggle" role="group" aria-label="View">
+      <button type="button" data-view="grid" aria-label="Card view" aria-pressed="true">{{ icon('grid') }}</button>
+      <button type="button" data-view="list" aria-label="List view" aria-pressed="false">{{ icon('list') }}</button>
+    </div>
+    {% if current_user.is_owner %}<button class="btn btn-primary" type="button" id="add-new" data-soon="Adding a project from the dashboard is planned for v2 (S10).">{{ icon('plus') }}Add New…</button>{% endif %}
+  </div>
+
+  {% if ai %}{% set is_low = ai.left is not none and ai.low and ai.left < ai.low %}
+  <a class="ai-strip{% if is_low or ai.near %} is-warn{% endif %}" href="{{ url_for('ai_cost.index') }}" aria-label="AI cost and Anthropic balance — open the AI cost page">
+    <span class="h-ic" style="--h:150">{{ icon('coin') }}</span>
+    <span class="ai-k"><b>{{ "$%.2f"|format(ai.left) if ai.left is not none else "Not recorded" }}</b><small>Anthropic balance{% if ai.left is not none %} (estimate){% endif %}</small></span>
+    <span class="ai-k"><b>${{ "%.2f"|format(ai.today) }}</b><small>AI today</small></span>
+    <span class="ai-k"><b>${{ "%.2f"|format(ai.month) }}</b><small>AI this month</small></span>
+    {% if is_low %}<span class="pill pill-bad">Balance low — add credit</span>{% endif %}
+    {% for r in ai.near %}<span class="pill {{ 'pill-bad' if r.pct >= 100 else 'pill-warn' }}">{{ r.p.name }} {{ r.pct }}% of AI limit</span>{% endfor %}
+    <span class="ai-go">Details →</span>
+  </a>
+  {% endif %}
+
+  <div class="kpis" id="kpis" role="group" aria-label="Summary — tap to filter">
+    {% for key, h, ic, val, label in [("all", 240, "grid", rows|length, "Projects"), ("bad", 0, "bell", counts.bad, "Down now"),
+        ("warn", 35, "activity", counts.warn, "Need attention"), ("approval", 215, "send", total_waiting, "Waiting approval"),
+        ("open", 265, "list", total_open, "Open changes")] %}
+      <button class="kpi" type="button" style="--h:{{ h }}" data-filter="{{ key }}" aria-pressed="{{ 'true' if key == 'all' else 'false' }}">
+        <span class="kpi-ic">{{ icon(ic) }}</span><b>{{ val }}</b><span class="l">{{ label }}</span></button>
+    {% endfor %}
+  </div>
+
+  <div class="panels">
+    <section class="ov-card panel" aria-labelledby="h-health">
+      <div class="ov-head"><h2 id="h-health"><span class="h-ic" style="--h:150">{{ icon('activity') }}</span>Health</h2><span class="hint">Checked {{ now|ago }}</span></div>
+      <div class="hbar" aria-hidden="true">
+        {% for k in ("bad", "warn", "ok") if counts[k] %}<span class="s-{{ k }}" style="width:{{ (counts[k] / (rows|length or 1) * 100)|round(2) }}%"></span>{% endfor %}
+      </div>
+      <div class="hcounts">
+        {% for k, label in (("ok", "Healthy"), ("warn", "Attention"), ("bad", "Down")) %}<div class="hcount s-{{ k }}"><b>{{ counts[k] }}</b><span>{{ label }}</span></div>{% endfor %}
+      </div>
+      <ul class="att-list panel-scroll">
+        {% for r in rows if r.level != "ok" %}
+          <li><a class="s-{{ r.level }}" href="{{ url_for('projects.detail', project_id=r.p.id) }}" title="{{ r.reason }}"><span class="ldot s-{{ r.level }}"></span><strong>{{ r.p.name }}</strong><span class="r">{{ r.reason }}</span></a></li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="ov-card panel" aria-labelledby="h-act">
+      <div class="ov-head"><h2 id="h-act"><span class="h-ic" style="--h:265">{{ icon('sync') }}</span>Activity log</h2>
+        {% if current_user.is_owner %}<a class="hint-link" href="{{ url_for('users.index') }}#log">Full log →</a>{% endif %}</div>
+      <ul class="act-list panel-scroll">
+        {% set ns = namespace(day="") %}
+        {% for l in activity %}
+          {% set lt = l.created_at|local %}{% set day = lt.strftime("%-d %b %Y") %}
+          {% if day != ns.day %}<li class="act-day">{{ "Today" if day == (now|local).strftime("%-d %b %Y") else day }}</li>{% set ns.day = day %}{% endif %}
+          {% set ic = ACTIVITY_ICON.get(l.action, ("activity", 240)) %}
+          <li><span class="act-ic" style="--h:{{ ic[1] }}">{{ icon(ic[0]) }}</span><span>
+            <span class="t"><b>{{ l.user.name if l.user else ("Client" if l.action.startswith("Client") else "Monitor") }}</b> · {{ l.action }} · {{ l.project.name if l.project else "" }}</span>
+            {% if l.details %}<span class="act-det">{{ l.details }}</span>{% endif %}
+            <time>{{ l.created_at|ago }}</time></span></li>
+        {% else %}
+          <li class="mini-empty">Nothing yet.</li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="ov-card panel" aria-labelledby="h-appr">
+      <div class="ov-head"><h2 id="h-appr"><span class="h-ic" style="--h:215">{{ icon('check') }}</span>Approvals</h2>
+        <div class="seg-sm" role="group" aria-label="Approval list">
+          <button type="button" data-appr="waiting" aria-pressed="true">Pending {{ pending|length }}</button>
+          <button type="button" data-appr="ready" aria-pressed="false">Approved {{ approved|length }}</button>
+        </div></div>
+      <ul class="appr-list panel-scroll" data-appr-list="waiting">
+        {% for c in pending %}
+          {% set a = c.approval %}
+          <li class="appr" style="--h:{{ hue(c.project) }}">
+            <div class="appr-top"><a href="{{ url_for('projects.detail', project_id=c.project_id) }}">{{ c.title }}</a>
+              <span class="appr-age{% if a and now - a.sent_at > slow_after %} slow{% endif %}">sent {{ a.sent_at|ago if a else "—" }}</span></div>
+            <div class="appr-meta"><span class="pdot" style="--h:{{ hue(c.project) }}"></span>{{ c.project.name }} · {{ c.project.client_name }}</div>
+            {% if current_user.is_owner %}
+              <div class="appr-acts">
+                <button class="btn btn-ok" type="button" data-answer="{{ url_for('main.record_answer', change_id=c.id) }}" data-decision="approved" data-title="{{ c.title }}" data-project="{{ c.project.name }} · {{ c.project.client_name }}">{{ icon('check') }}Approve</button>
+                <button class="btn btn-no" type="button" data-answer="{{ url_for('main.record_answer', change_id=c.id) }}" data-decision="changes" data-title="{{ c.title }}" data-project="{{ c.project.name }} · {{ c.project.client_name }}">{{ icon('x') }}Reject</button>
+              </div>
+            {% else %}
+              <p class="hint">Waiting for the client. Only the owner can record an answer.</p>
+            {% endif %}
+          </li>
+        {% else %}
+          <li class="mini-empty">No approvals pending.</li>
+        {% endfor %}
+      </ul>
+      <ul class="appr-list panel-scroll" data-appr-list="ready" hidden>
+        {% for c in approved %}
+          {% set a = c.approval %}
+          <li class="appr" style="--h:{{ hue(c.project) }}">
+            <div class="appr-top"><a href="{{ url_for('projects.detail', project_id=c.project_id) }}">{{ c.title }}</a>
+              <span class="appr-age">approved {{ a.decided_at|ago if a and a.decided_at else "—" }}</span></div>
+            <div class="appr-meta"><span class="pdot" style="--h:{{ hue(c.project) }}"></span>{{ c.project.name }} · {{ c.project.client_name }}{% if a and a.comment %} · “{{ a.comment }}”{% endif %}</div>
+            <div class="appr-acts"><a class="btn btn-primary" href="{{ url_for('projects.detail', project_id=c.project_id) }}">{{ icon('rocket') }}Go Live…</a></div>
+          </li>
+        {% else %}
+          <li class="mini-empty">Nothing approved and waiting to go live.</li>
+        {% endfor %}
+      </ul>
+    </section>
+  </div>
+
+  <div class="overview">
+    <section class="ov-main" aria-labelledby="h-projects">
+      <div class="ov-main-head">
+        <h2 id="h-projects">Projects</h2>
+        <div class="tabs-sm" role="group" aria-label="Filter projects" id="chips">
+          {% for key, label, n in [("all", "All", rows|length), ("bad", "Down", counts.bad), ("warn", "Attention", counts.warn),
+              ("approval", "Approval pending", rows|selectattr("waiting")|list|length), ("open", "Open changes", rows|selectattr("open")|list|length),
+              ("active", "Active", rows|selectattr("p.is_active")|list|length)] %}
+            <button type="button" data-filter="{{ key }}" aria-pressed="{{ 'true' if key == 'all' else 'false' }}">{{ label }} <span class="n">{{ n }}</span></button>
+          {% endfor %}
+        </div>
+      </div>
+      {% if not current_user.is_owner %}<p class="scope-note">You see only the {{ rows|length }} projects assigned to you.</p>{% endif %}
+
+      <div class="pgrid" id="grid">
+        {% for r in rows %}{% set p = r.p %}
+          <a class="pcard" href="{{ url_for('projects.detail', project_id=p.id) }}" style="--h:{{ hue(p) }}"
+             data-item data-name="{{ (p.name ~ ' ' ~ p.client_name)|lower }}" data-level="{{ r.level }}" data-waiting="{{ r.waiting }}" data-open="{{ r.open }}" data-active="{{ 1 if p.is_active else 0 }}">
+            <div class="pc-band"><span class="pav{% if not p.is_active %} off{% endif %}">{{ initials(p.name) }}</span>
+              <span class="pc-id"><strong>{{ p.name }}</strong><span>{{ r.live.url.replace("https://", "") if r.live else "" }}</span></span>
+              <span class="hpill s-{{ r.level }}">{{ r.label }}</span></div>
+            <div class="pc-body">
+              <div class="chip-row"><span class="repo">{{ icon('github') }}<span>{{ p.github_repo or "No repo yet" }}</span></span>
+                {% for t in p.tech_stack %}<span class="tech" style="--h:{{ tech_hue(t) }}">{{ t }}</span>{% endfor %}
+                {% if not p.is_active %}<span class="tag-off">Dormant</span>{% endif %}
+                {% if p.needs_setup %}<span class="pill pill-warn">Needs setup</span>{% endif %}{% if p.repo_missing %}<span class="pill pill-bad">Repo missing</span>{% endif %}</div>
+              {% if r.level != "ok" %}
+                <div class="pc-now s-{{ r.level }}">{{ icon('alert') }}<span>{{ r.reason }}<small>{{ "Open the project to roll back or debug" if r.level == "bad" else "Needs a look" }}</small></span></div>
+              {% else %}
+                <div class="pc-now">{{ icon('rocket') }}<span>{{ r.last_deploy.note if r.last_deploy else "No live release yet" }}<small>Live on <span class="mono">{{ r.live.current_commit if r.live else "—" }}</span></small></span></div>
+              {% endif %}
+              <div class="stats">
+                <div class="stat" style="--h:220"><i>{{ icon('upload') }}</i><b>{{ ago_of(r.last_deploy.created_at if r.last_deploy else None) }}</b><span>Last deploy</span></div>
+                <div class="stat{% if r.backup_stale %} alarm{% endif %}" style="--h:{{ 0 if r.backup_stale else 160 }}"><i>{{ icon('db') }}</i><b>{{ r.last_backup.created_at|ago if r.last_backup else "Missing" }}</b><span>Last backup</span></div>
+                <div class="stat{% if not r.open %} zero{% endif %}" style="--h:265"><i>{{ icon('list') }}</i><b>{{ r.open }}</b><span>Open changes</span></div>
+                <div class="stat{% if not r.waiting %} zero{% endif %}" style="--h:215"><i>{{ icon('send') }}</i><b>{{ r.waiting }}</b><span>Waiting approval</span></div>
+              </div>
+              <div class="pc-foot"><span>{{ p.client_name }} · {{ "VPS" if p.host_type == "vps" else "cPanel" }}</span><span class="open">Open project →</span></div>
+            </div>
+          </a>
+        {% endfor %}
+      </div>
+
+      <div class="plist" id="list" hidden>
+        <div class="plist-head"><span>Project</span><span>Status</span><span>Live version</span><span>Backup</span><span>Last deploy</span></div>
+        {% for r in rows %}{% set p = r.p %}
+          <a class="prow" href="{{ url_for('projects.detail', project_id=p.id) }}" style="--h:{{ hue(p) }}"
+             data-item data-name="{{ (p.name ~ ' ' ~ p.client_name)|lower }}" data-level="{{ r.level }}" data-waiting="{{ r.waiting }}" data-open="{{ r.open }}" data-active="{{ 1 if p.is_active else 0 }}">
+            <span class="who"><span class="pav{% if not p.is_active %} off{% endif %}">{{ initials(p.name) }}</span><span class="nm"><strong>{{ p.name }}</strong><span>{{ p.client_name }} · {{ p.tech_stack|join(" + ") }}</span></span></span>
+            <span class="col"><span class="st s-{{ r.level }}"><span class="ldot s-{{ r.level }}"></span>{{ r.label }}</span>{% if r.reason %}<span class="sub">{{ r.reason }}</span>{% endif %}</span>
+            <span class="col col-hide"><span class="commit">{{ icon('branch') }}<span class="mono">{{ r.live.current_commit if r.live else "—" }}</span></span><span class="sub">{{ r.last_deploy.note if r.last_deploy else "" }}</span></span>
+            <span class="col col-hide"><span class="sub{% if r.backup_stale %} stale{% endif %}">{{ r.last_backup.created_at|ago if r.last_backup else "missing" }}</span></span>
+            <span class="col col-hide"><span>{{ ago_of(r.last_deploy.created_at if r.last_deploy else None) }}</span><span class="sub">{{ r.open }} open · {{ r.waiting }} waiting</span></span>
+          </a>
+        {% endfor %}
+      </div>
+      <div class="empty" id="empty" {% if rows %}hidden{% endif %}>No projects match. Clear the search or pick another filter.</div>
+    </section>
+  </div>
+
+  {% if current_user.is_owner %}
+  <dialog class="dlg" id="dlg-answer">
+    <form method="post" id="answer-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="decision" id="answer-decision">
+      <div class="dlg-head"><h2 id="answer-title">Approve for the client</h2><button type="button" class="icon-btn" data-close aria-label="Close">{{ icon('x') }}</button></div>
+      <div class="dlg-body">
+        <p><strong id="answer-change"></strong><br><span class="hint" id="answer-project"></span></p>
+        <div class="field"><label for="answer-note" id="answer-label">How did the client approve? (kept in the activity log)</label>
+          <textarea id="answer-note" name="note" required></textarea></div>
+      </div>
+      <div class="dlg-foot"><button type="button" class="btn" data-close>Cancel</button><button class="btn btn-primary" type="submit" id="answer-go">Approve</button></div>
+    </form>
+  </dialog>
+  {% endif %}
+{% endblock %}

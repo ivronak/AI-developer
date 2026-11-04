@@ -1,0 +1,106 @@
+/* Dashboard-only additions (the other CSS files are copies of mock-ui/assets/css — keep those identical to the mock). */
+.inline-form { display: contents; }
+a.me { color: inherit; text-decoration: none; border-radius: var(--r-md); }
+a.me:hover .me-txt strong { text-decoration: underline; }
+.toast-bad { background: var(--bad); color: #ffffff; }
+.alerts-head .link-btn { font-size: 13px; }
+
+/* Forms on cards */
+.form-grid { display: grid; gap: 14px; }
+.form-row { display: grid; gap: 14px; }
+@media (min-width: 640px) { .form-row.two { grid-template-columns: 1fr 1fr; } }
+.card { display: grid; gap: 14px; padding: 18px; border-radius: var(--r-lg); background: var(--surface); border: 1px solid var(--line); min-width: 0; }
+.card h2 { font-size: 16px; display: flex; align-items: center; gap: 8px; }
+.card-grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 900px) { .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
+
+/* Authenticator setup */
+.qr { width: 200px; max-width: 100%; aspect-ratio: 1; padding: 8px; border-radius: 12px; background: #ffffff; border: 1px solid var(--line); }
+.qr svg { width: 100%; height: 100%; display: block; }
+.secret { font-family: var(--font-mono); font-size: 13px; letter-spacing: .06em; padding: 8px 10px; border-radius: var(--r-sm); background: var(--surface-2); overflow-wrap: anywhere; user-select: all; }
+.setup-2fa { display: grid; gap: 16px; }
+@media (min-width: 640px) { .setup-2fa.wide { grid-template-columns: auto 1fr; align-items: start; } }
+.codes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.codes span { font-family: var(--font-mono); font-size: 15px; padding: 10px; border-radius: var(--r-sm); background: var(--surface-2); text-align: center; letter-spacing: .05em; }
+.switch-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.linkbox { display: grid; gap: 8px; padding: 14px 16px; border-radius: var(--r-md); background: var(--ok-soft); border: 1px solid var(--ok); }
+.linkbox code { font-family: var(--font-mono); font-size: 12.5px; overflow-wrap: anywhere; user-select: all; }
+.msg-ok { background: var(--ok-soft); color: var(--ok); }
+.role-chip { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 999px; background: var(--fg); color: var(--bg); font-size: 12px; font-weight: 600; }
+.summary-list li.done-step { color: var(--ok); } .summary-list li.done-step::marker { content: "✓  "; }
+/* Claude chat (Step 7) */
+.agent-run { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; padding: 10px 12px; border-radius: var(--r-md); background: hsl(265 var(--band-s) var(--band-l)); border: 1px solid hsl(265 var(--tint-s) var(--tint-l)); font-size: 13.5px; }
+.agent-run small { display: block; color: var(--muted); font-size: 12px; }
+.spin { width: 18px; height: 18px; border-radius: 50%; border: 2px solid hsl(265 var(--tint-s) var(--tint-l)); border-top-color: hsl(265 var(--solid-s) var(--solid-l)); animation: spin .8s linear infinite; }
+.bubble .shot { display: block; max-width: 240px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
+.bubble .shot img { display: block; width: 100%; height: auto; }
+.composer.is-locked textarea, .composer.is-locked .composer-bar { opacity: .5; pointer-events: none; }
+.preset-pick { height: 32px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); padding: 0 8px; font-size: 13px; max-width: 100%; }
+/* Beta deploy / sync (Step 8) */
+.sub-head { font-size: 13px; font-weight: 600; color: var(--muted); margin: 4px 0 8px; }
+.sub-head ~ .sub-head { margin-top: 18px; }
+details.job-row { display: block; }
+details.job-row > summary { display: flex; justify-content: space-between; align-items: center; gap: 12px; cursor: pointer; list-style: none; }
+details.job-row > summary::-webkit-details-marker { display: none; }
+.job-out { margin: 10px 0 0; padding: 10px 12px; max-height: 320px; overflow: auto; border-radius: var(--r-sm); background: var(--surface-2); font-size: 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+#srv-key { font-size: 12px; resize: none; }
+/* AI cost (Step 13) */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.bars { display: grid; grid-template-columns: repeat(14, minmax(0, 1fr)); gap: 4px; align-items: end; height: 120px; }
+.bar { display: grid; grid-template-rows: 1fr auto; gap: 4px; height: 100%; text-align: center; }
+.bar span { align-self: end; height: var(--v); min-height: 2px; border-radius: 4px 4px 2px 2px; background: hsl(215 var(--solid-s) var(--solid-l)); }
+.bar small { font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.meter { display: block; height: 6px; margin-top: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; max-width: 220px; }
+.meter span { display: block; height: 100%; background: var(--ok); }
+.meter.m-warn span { background: var(--warn); }
+.meter.m-bad span { background: var(--bad); }
+.lim-row { flex-wrap: wrap; }
+.lim-form { display: flex; gap: 6px; align-items: center; }
+.lim-form input { width: 84px; height: 32px; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); font-size: 13px; }
+.pc-now.wrap span { white-space: normal; }   /* page-level notices: show the whole instruction, also on phones */
+.lim-row .row-lead { flex: 1 1 170px; min-width: 0; }
+.lim-row .row-main { min-width: 0; }
+.lim-row .row-title { overflow-wrap: normal; word-break: normal; overflow: hidden; text-overflow: ellipsis; }
+.lim-row .lim-form { margin-left: auto; }
+/* AI strip on the Projects overview (owner) */
+.ai-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; padding: 10px 14px; border-radius: var(--r-lg); border: 1px solid var(--line); background: var(--surface); color: inherit; text-decoration: none; }
+.ai-strip:hover { box-shadow: var(--shadow); }
+.ai-strip:focus-visible { outline: none; box-shadow: var(--focus); }
+.ai-strip.is-warn { border-color: var(--warn); }
+.ai-k { display: grid; line-height: 1.2; }
+.ai-k b { font-size: 15px; font-variant-numeric: tabular-nums; }
+.ai-k small { font-size: 12px; color: var(--muted); }
+.ai-go { margin-left: auto; font-size: 13px; color: var(--muted); }
+/* Claude's chat notes: small, safe Markdown (app/textfmt.py) */
+.bubble .plain { white-space: pre-wrap; overflow-wrap: anywhere; }
+.md { display: grid; gap: 8px; overflow-wrap: anywhere; }
+.md p, .md ul, .md ol, .md pre { margin: 0; }
+.md ul, .md ol { padding-left: 20px; display: grid; gap: 3px; }
+.md code { font-family: var(--font-mono); font-size: 12.5px; padding: 1px 5px; border-radius: 5px; background: var(--surface-2); }
+.md pre { padding: 10px 12px; border-radius: var(--r-sm); background: var(--surface-2); overflow-x: auto; }
+.md pre code { padding: 0; background: none; white-space: pre; }
+
+/* Settings → Claude accounts */
+.acc-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.acc-head h2 { margin: 0; flex: 1 1 auto; }
+.acc-facts { display: grid; gap: 6px; margin: 0; }
+.acc-facts > div { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr); gap: 8px; font-size: 14px; }
+.acc-facts dt { color: var(--muted); }
+.acc-facts dd { margin: 0; overflow-wrap: anywhere; }
+.acc-conn { display: grid; gap: 6px; font-size: 14px; }
+.cap-group { display: grid; gap: 6px; }
+.cap-group h3 { margin: 0; font-size: 13px; }
+.cap-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.cap-list li { display: grid; gap: 1px; font-size: 14px; }
+.cap-list small { color: var(--muted); font-size: 13px; }
+/* Settings → Claude Code: the list of web-login accounts */
+.acc-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 10px; }
+.acc-row { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); min-width: 0; }
+.acc-row-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.acc-row .hint { margin: 0; overflow-wrap: anywhere; }
+.acc-login { display: grid; gap: 8px; padding: 10px; border-radius: var(--r-sm); background: var(--surface-2); }
+.acc-login .summary-list { margin: 0; }
+.acc-more summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.acc-more[open] { display: grid; gap: 8px; }
+.pill-muted { background: var(--surface-2); color: var(--muted); }
+@media (max-width: 520px) { .acc-facts > div { grid-template-columns: minmax(0, 1fr); gap: 0; } }

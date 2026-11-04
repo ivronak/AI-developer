@@ -1,0 +1,16 @@
+[Unit]
+Description=AI dashboard root-command service (one root command per authenticator code)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/aidash-rootd serve
+Restart=on-failure
+RestartSec=5
+# A restart of this service (or a deploy) must not kill a half-done root command or a service that command started.
+KillMode=process
+# It runs commands as root on purpose, so it is NOT sandboxed. What limits it: the socket (root and the dashboard's own Linux
+# user only), the authenticator code for every single command, and the log in /var/log/aidash-rootd.log.
+
+[Install]
+WantedBy=multi-user.target

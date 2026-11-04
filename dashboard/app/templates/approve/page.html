@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title>Change approval</title>
+  <script>try { var t = localStorage.getItem("apd.theme"); if (t) document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/ui.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/approve.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+  <script src="{{ url_for('static', filename='js/ui.js') }}" defer></script>
+</head>
+<body>
+  <main class="ap-page" id="main">
+    <header class="ap-top">
+      <span class="label">Change approval</span>
+      <button class="icon-btn" type="button" data-theme-toggle aria-label="Switch light / dark theme"></button>
+    </header>
+    <div id="content">
+    {% if done %}
+      <div class="ap-card ap-done"><p class="big {{ done[1] }}">{{ done[0] }}</p><p class="muted">{{ done[2] }}</p></div>
+    {% else %}
+      <section class="hero" style="--h:{{ hue(p) }}"><span class="pav">{{ initials(p.name) }}</span>
+        <div class="hero-id"><p class="ap-for">{{ p.name }} · for {{ p.client_name }}</p><h1>{{ c.title }}</h1></div></section>
+      <section class="ap-card">
+        {% if ask %}<p class="ap-desc">{{ ask.body }}</p>{% endif %}
+        <div><div class="label">Please check</div><ul class="ap-list">{% for x in a.checklist %}<li>{{ x }}</li>{% endfor %}</ul></div>
+        {% if beta %}<a class="btn btn-block" href="{{ beta.url }}" target="_blank" rel="noopener noreferrer">{{ icon('ext') }}Open the test site</a>{% endif %}
+        {% if login %}<p class="hint">The test site asks for a login first — user <strong class="mono">{{ login[0] }}</strong>, password <strong class="mono">{{ login[1] }}</strong>. Then sign in to the app as usual.</p>{% endif %}
+        <p class="hint">The test site has a copy of your real data. Nothing you do there reaches your customers.</p>
+      </section>
+      <section class="ap-card" id="answer">
+        <form method="post" class="ap-acts">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-ok" type="submit" name="decision" value="approved">{{ icon('check') }}Approve</button>
+          <button class="btn" type="button" id="no">Changes needed</button>
+        </form>
+        <form method="post" id="no-form" enctype="multipart/form-data" class="form-grid"{% if not open_no %} hidden{% endif %}>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="decision" value="changes">
+          <div class="field"><label for="comment">What should change?</label><textarea id="comment" name="comment" required maxlength="4000" placeholder="e.g. The search box should also find old entries">{{ comment or "" }}</textarea></div>
+          <div class="field"><label for="shot">Screenshot (optional)</label><input id="shot" name="shot" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></div>
+          {% if error %}<div class="msg msg-bad">{{ error }}</div>{% endif %}
+          <button class="btn btn-primary btn-block" type="submit">Send</button>
+        </form>
+      </section>
+      <p class="ap-note">This link is open until {{ a.expires_at|stamp }}, or until you reply.</p>
+      <script>
+        document.getElementById("no").addEventListener("click", function () {
+          var f = document.getElementById("no-form"); f.hidden = false; document.getElementById("comment").focus();
+        });
+      </script>
+    {% endif %}
+    </div>
+  </main>
+</body>
+</html>

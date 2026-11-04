@@ -159,3 +159,5 @@ button, input, select, textarea { font: inherit; color: inherit; }
   padding: 40px 16px; text-align: center; color: var(--muted);
   border: 1px dashed var(--line); border-radius: var(--r-lg);
 }
+/* an inline icon in text (status lines, hints) is as big as the letters — a bare <svg> otherwise fills the whole width */
+p > svg, .hint > svg, li > svg, summary > svg { width: 1em; height: 1em; vertical-align: -0.15em; flex: none; }

@@ -1,0 +1,320 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="page-head">
+    <h1>Settings</h1>
+    <p>Connections the dashboard uses. Only the owner sees this page.</p>
+  </div>
+
+  {% for label, d, left in expiries if d and left is not none and left <= 14 %}
+    <div class="pc-now wrap {{ 's-bad' if left <= 1 else 's-warn' }}">{{ icon('alert') }}<span>{{ label }} {{ "expired" if left < 0 else "expires" }} on {{ d.strftime("%-d %b %Y") }}{% if left >= 0 %} ({{ left }} day{{ "" if left == 1 else "s" }} left){% endif %}<small>Make a new one and paste it below before then.</small></span></div>
+  {% endfor %}
+  {% if code_guard %}
+    <div class="pc-now wrap {{ 's-ok' if code_guard.ok and not code_guard.stale else 's-bad' }}">{{ icon('check' if code_guard.ok and not code_guard.stale else 'alert') }}<span>
+      {% if code_guard.stale %}Code protection has not reported for {{ code_guard.age_minutes if code_guard.age_minutes is not none else "a long time" }} minutes — the guard may have stopped.
+      {% elif code_guard.ok %}Code protection is on: the dashboard's code is exactly the last saved checkpoint{% if code_guard.checkpoint.message %} (“{{ code_guard.checkpoint.message }}”){% endif %}. Checked {{ code_guard.age_minutes }} min ago.
+      {% else %}Code protection found a problem: {{ code_guard.problems|join(" · ") }}{% endif %}
+      <small>The dashboard's code is kept in a git copy on the server. If a deploy from another computer ever erases our changes, you get an alert here and can put them back with one command (<span class="mono">aidash-code-guard restore</span>).</small></span></div>
+  {% endif %}
+  {% if rootd_state %}
+    {% set root_ok = rootd_state.available and rootd_state.enrolled and not rootd_state.locked and rootd_runner_ok %}
+    <div class="pc-now wrap {{ 's-ok' if root_ok else 's-warn' }}">{{ icon('check' if root_ok else 'alert') }}<span>
+      {% if not rootd_state.available %}Root commands are off: the root service is not running on the server.
+      {% elif not rootd_state.enrolled %}Root commands are not set up yet. One step on the server: <span class="mono">aidash-rootd enroll</span> (it links an authenticator app).
+      {% elif rootd_state.locked %}Root commands are locked for about {{ (rootd_state.retry_after // 60) + 1 }} more minute(s) after wrong codes.
+      {% elif not rootd_runner_ok %}Root commands are switched off for Claude: Claude Code does not run as a separate Linux user here (TEST_RUNNER_USER), so its shell could reach the root service itself.
+      {% else %}Root commands are ready: Claude can ask to run a command as root — only after you read it and type a fresh authenticator code.{% endif %}
+      <small>Every root command is logged on the server in <span class="mono">/var/log/aidash-rootd.log</span>. To switch it off: <span class="mono">systemctl disable --now aidash-rootd</span>.</small></span></div>
+  {% endif %}
+  <div class="card-grid">
+    <section class="card" aria-labelledby="h-gh">
+      <h2 id="h-gh"><span class="h-ic" style="--h:245">{{ icon('github') }}</span>GitHub</h2>
+      <p class="hint"><strong>Only repos owned by this account / organization appear.</strong> A repo that belongs to another person's GitHub account (you're only a collaborator there) can't be read with this token — ask its owner to <em>Transfer ownership</em> to this account (they stay a collaborator), or move all repos into a GitHub organization. A renamed or transferred repo stays the same project here.</p>
+      <p class="hint">Every repo of this account / organization is a project here. A new repo shows up as a project automatically (every 5 minutes on the server, or with “Sync now”).</p>
+      <form method="post" action="{{ url_for('settings.save_github') }}" class="form-grid">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-row two">
+          <div class="field"><label for="gh-owner">Account or organization name</label>
+            <input id="gh-owner" name="owner" value="{{ gh_owner }}" placeholder="e.g. ivronak" autocomplete="off"></div>
+          <div class="field"><label for="gh-type">It is a…</label>
+            <select id="gh-type" name="owner_type">
+              <option value="user"{% if gh_type != "org" %} selected{% endif %}>Personal account</option>
+              <option value="org"{% if gh_type == "org" %} selected{% endif %}>Organization</option>
+            </select></div>
+        </div>
+        <div class="field"><label for="gh-token">Access token {% if gh_token_mask %}<span class="hint">(saved: <span class="mono">{{ gh_token_mask }}</span> — leave empty to keep it)</span>{% endif %}</label>
+          <input id="gh-token" name="token" type="password" autocomplete="off" placeholder="{{ 'Paste a new token to replace it' if gh_token_mask else 'github_pat_…' }}">
+          <span class="hint">GitHub → Settings → Developer settings → Fine-grained tokens → repository access to this owner, permission “Contents: Read” and “Metadata: Read”. Stored encrypted; never shown again.</span></div>
+        {% if gh_token_mask %}<label class="check"><input type="checkbox" name="clear_token" value="1"> <span>Remove the saved token</span></label>{% endif %}
+        <div class="chip-row"><button class="btn btn-primary" type="submit">Save</button></div>
+      </form>
+      {% set ghx = expiries[0] %}
+      {% if ghx[1] %}<p class="hint">Token expires on <strong>{{ ghx[1].strftime("%-d %b %Y") }}</strong> (read from GitHub) — Telegram reminder 7 days and 1 day before.</p>{% endif %}
+      <div class="switch-row">
+        <p class="hint">Last sync: <strong>{{ gh_last[:16].replace("T", " ") ~ " UTC" if gh_last else "never" }}</strong>{% if gh_result %} · {{ gh_result }}{% endif %}</p>
+        <div class="chip-row">
+          <form method="post" action="{{ url_for('settings.test_github') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm" type="submit">Test connection</button></form>
+          <form method="post" action="{{ url_for('settings.sync_now') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-primary" type="submit">{{ icon('sync') }}Sync now</button></form>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="h-new">
+      <h2 id="h-new"><span class="h-ic" style="--h:35">{{ icon('plus') }}</span>New from GitHub — needs details</h2>
+      {% if new_projects %}
+        <p class="hint">Fill in client, hosting and the beta / live addresses so the dashboard can work with them.</p>
+        <div class="rows">
+          {% for p in new_projects %}
+            <a class="row row-btn" href="{{ url_for('projects.detail', project_id=p.id) }}#settings">
+              <span class="row-lead"><span class="pav xs" style="--h:{{ hue(p) }}">{{ initials(p.name) }}</span>
+                <span class="row-main"><span class="row-title">{{ p.name }}</span><span class="row-sub mono">{{ p.github_repo }}{% if p.repo_private %} · private{% endif %}</span></span></span>
+              <span class="row-side"><span class="pill pill-warn">Needs setup</span></span>
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}<p class="hint">Nothing waiting. New repos appear here after a sync.</p>{% endif %}
+      {% if missing %}
+        <p><strong>Repo missing on GitHub</strong> <span class="hint">— renamed or deleted? The project stays; fix its repo name in the project's Settings.</span></p>
+        <div class="rows">{% for p in missing %}<a class="row row-btn" href="{{ url_for('projects.detail', project_id=p.id) }}#settings"><span class="row-main"><span class="row-title">{{ p.name }}</span><span class="row-sub mono">{{ p.github_repo }}</span></span><span class="row-side"><span class="pill pill-bad">Repo missing</span></span></a>{% endfor %}</div>
+      {% endif %}
+    </section>
+      <section class="card" id="claude" aria-labelledby="h-ai">
+      <h2 id="h-ai"><span class="h-ic" style="--h:265">{{ icon('activity') }}</span>Claude (AI that makes the changes)</h2>
+      <p class="hint">The chat on each project sends the request to Claude with this API key. Claude works only on the change's own branch, runs the tests and pushes the branch — it can't deploy or reach any server.</p>
+      <p class="hint">Spent this month: <strong>${{ "%.2f"|format(month_cost) }}</strong></p>
+      <form method="post" action="{{ url_for('settings.save_claude') }}" class="form-grid">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="field"><label for="ai-key">Anthropic API key {% if ai_key_mask %}<span class="hint">(saved: <span class="mono">{{ ai_key_mask }}</span> — leave empty to keep it)</span>{% endif %}</label>
+          <input id="ai-key" name="key" type="password" autocomplete="off" placeholder="sk-ant-…">
+          <span class="hint">console.anthropic.com → API keys → Create key. Paste it here only — it is checked with Anthropic, stored encrypted and never shown again.</span></div>
+        <div class="field"><label for="ai-exp">The key expires on <span class="hint">(optional — you get a Telegram reminder 7 days and 1 day before)</span></label>
+          <input id="ai-exp" name="key_expires" type="date" value="{{ ai_key_expires }}"></div>
+        <div class="field"><label for="ai-preset">Default choice in the chat <span class="hint">(people can change it per request)</span></label>
+          <select id="ai-preset" name="preset">
+            {% for key, pr in PRESETS.items() %}<option value="{{ key }}"{% if key == ai_preset %} selected{% endif %}>{{ pr[0] }} — {{ pr[1] }} · {{ MODELS[pr[2]][0].split(" — ")[0] }} (${{ MODELS[pr[2]][1] }} / ${{ MODELS[pr[2]][2] }} per million tokens)</option>{% endfor %}
+          </select></div>
+        <div class="form-row two">
+          <div class="field"><label for="ai-usd">Stop one run at (US$)</label><input id="ai-usd" name="max_usd" type="number" min="0.5" max="50" step="0.5" value="{{ ai_max_usd }}"></div>
+          <div class="field"><label for="ai-turns">Stop one run after (steps)</label><input id="ai-turns" name="max_turns" type="number" min="5" max="150" value="{{ ai_max_turns }}"></div>
+        </div>
+        <div><button class="btn btn-primary" type="submit">Save</button></div>
+      </form>
+    </section>
+
+    <section class="card" id="claude-code" aria-labelledby="h-cc">
+      <h2 id="h-cc"><span class="h-ic" style="--h:285">{{ icon('activity') }}</span>Claude Code (on this server)</h2>
+      <p class="hint">A second way to make changes: Claude Code runs on this server, with <strong>one ongoing session per project</strong> so it remembers earlier work. Pick it per project (project → Settings → AI engine). It works only inside the project's own copy, as a low-rights user — it can't push or deploy. It can search the web and read web pages (docs, error messages), and only for reading. Beta, client approval and Go Live stay exactly the same.</p>
+      <h3>Claude accounts</h3>
+      <p class="hint">Every Claude account signs in through the web — no tokens. Add as many as you like, each with its own name: in the chat you pick which account (and which of <em>its</em> models) works on a message. Each account stays logged in: the dashboard checks it every hour and renews it by itself; if one ever logs out you get an alert. The <strong>default</strong> account is pre-selected in the chat and also does the beta, release and live-steps work.</p>
+      <p class="hint"><strong>Know the risk.</strong> Each login is a full login to that Claude account, kept in the server user's home. Anything that runs as that user — Claude's commands, a project's tests, package installs — could read it and use it from anywhere until you revoke it (claude.ai → Settings). On a project whose chat has a client's or developer's message, web search / fetch and every connector call ask you first.</p>
+      {% if cc_accounts %}
+        <ul class="acc-list">
+          {% for row in cc_accounts %}{% set a = row.a %}
+            <li class="acc-row" id="acc-{{ a.id }}">
+              <div class="acc-row-head">
+                <strong>{{ a.name }}</strong>
+                {% if a.is_default %}<span class="pill pill-accent">Default</span>{% endif %}
+                {% if a.status == "ok" %}<span class="pill pill-ok">Logged in</span>
+                {% elif a.status == "logged_out" %}<span class="pill pill-bad">Logged out</span>
+                {% elif a.status == "error" %}<span class="pill pill-warn">Could not check</span>
+                {% else %}<span class="pill pill-muted">Not checked yet</span>{% endif %}
+              </div>
+              <p class="hint">
+                {% if a.status == "ok" %}{{ (a.plan or "plan not shown")|title }}{% if a.email_hint %} · {{ a.email_hint }}{% endif %} · {{ row.models }} model{{ "" if row.models == 1 else "s" }}{% if a.connectors %} · connectors: {{ a.connectors|map(attribute="name")|join(", ") }}{% endif %}{% if a.expires_at %} · login renews in {{ row.left }}{% endif %}{% endif %}
+                {% if a.last_error %}{{ a.last_error }}{% endif %}
+                {% if a.checked_at %} · checked {{ a.checked_at|stamp }}{% endif %}
+                {% if not a.slug %} · the server user's own login{% endif %}
+              </p>
+              {% if row.login_url %}
+                <div class="acc-login">
+                  <ol class="summary-list">
+                    <li><a class="btn btn-primary btn-sm" href="{{ row.login_url }}" target="_blank" rel="noopener noreferrer">{{ icon('ext') }}Open the Claude login page</a> — sign in with the Claude account for “{{ a.name }}” (in a private window if your browser is signed in to another one).</li>
+                    <li>Claude shows a code. Copy it and paste it here:</li>
+                  </ol>
+                  <form method="post" action="{{ url_for('settings.account_code', account_id=a.id) }}" class="form-row two">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="field"><label for="acc-code-{{ a.id }}">Code from the login page</label>
+                      <input id="acc-code-{{ a.id }}" name="code" required autocomplete="off" spellcheck="false" maxlength="600"></div>
+                    <div class="chip-row"><button class="btn btn-primary" type="submit">Finish login</button>
+                      <button class="btn" type="submit" formaction="{{ url_for('settings.account_cancel', account_id=a.id) }}" formnovalidate>Cancel</button></div>
+                  </form>
+                  <p class="hint">The link works for 15 minutes.</p>
+                </div>
+              {% endif %}
+              <div class="chip-row">
+                {% if not row.login_url %}
+                  <form method="post" action="{{ url_for('settings.account_login', account_id=a.id) }}" class="inline-form" onsubmit="this.querySelector('button').disabled = true"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm{{ ' btn-primary' if a.status != 'ok' else '' }}" type="submit">{{ "Log in again" if a.status == "ok" else "Log in" }}</button></form>
+                {% endif %}
+                <form method="post" action="{{ url_for('settings.account_check', account_id=a.id) }}" class="inline-form" onsubmit="this.querySelector('button').disabled = true"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm" type="submit">Check now</button></form>
+                {% if not a.is_default %}
+                  <form method="post" action="{{ url_for('settings.account_default', account_id=a.id) }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm" type="submit">Make default</button></form>
+                {% endif %}
+              </div>
+              <details class="acc-more">
+                <summary>Rename or remove</summary>
+                <form method="post" action="{{ url_for('settings.account_rename', account_id=a.id) }}" class="form-row two">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <div class="field"><label for="acc-name-{{ a.id }}">Name</label><input id="acc-name-{{ a.id }}" name="name" value="{{ a.name }}" maxlength="60" required></div>
+                  <div><button class="btn btn-sm" type="submit">Rename</button></div>
+                </form>
+                <form method="post" action="{{ url_for('settings.account_remove', account_id=a.id) }}" class="form-grid">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <label class="check"><input type="checkbox" name="confirm" value="1"> <span>Log “{{ a.name }}” out on the server and remove it</span></label>
+                  <div><button class="btn btn-sm btn-danger" type="submit">Remove</button></div>
+                </form>
+              </details>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="hint"><strong>No Claude account yet</strong> — Claude Code uses the Claude API key above until you add one.</p>
+      {% endif %}
+      <form method="post" action="{{ url_for('settings.account_add') }}" class="form-row two" onsubmit="this.querySelector('button').disabled = true">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="field"><label for="acc-new">Add a Claude account</label><input id="acc-new" name="name" maxlength="60" required placeholder="e.g. Office Max plan"></div>
+        <div><button class="btn btn-primary" type="submit">{{ icon('plus') }}Add and log in</button></div>
+      </form>
+      <p class="hint"><a href="{{ url_for('settings.claude_accounts') }}">See every Claude and what each one can and can't do →</a></p>
+      <h3>Model in the chat</h3>
+      {% if cc_default_models %}
+        <p class="hint">The default account's {{ cc_default_models|length }} models (the same list as its <span class="mono">/model</span> picker; each account in the chat shows its own).{% if CC.ok %} Accounts not read yet use the server's list from <span class="mono">{{ CC.fetched_at }}</span>.{% endif %}
+          Pick what the chat starts with; people can change it for each message. Models that need extra usage credits on your plan are marked.</p>
+        <form method="post" action="{{ url_for('settings.save_cc_defaults') }}" class="form-grid">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="form-row two">
+            <div class="field"><label for="cc-def-model">Model</label>
+              <select id="cc-def-model" name="model">
+                {% for m in cc_default_models %}<option value="{{ m.value }}"{% if m.value == cc_default[0] %} selected{% endif %}>{{ m.displayName }}{% if m.description %} — {{ m.description }}{% endif %}{% if m.value in cc_credit_models %} · needs extra usage credits{% endif %}</option>{% endfor %}
+              </select></div>
+            <div class="field"><label for="cc-def-effort">Effort <span class="hint">(if the model doesn't support it, its default is used)</span></label>
+              <select id="cc-def-effort" name="effort">
+                <option value="">Default</option>
+                {% for lv in cc_levels %}<option value="{{ lv }}"{% if lv == cc_default[1] %} selected{% endif %}>{{ lv }}</option>{% endfor %}
+              </select></div>
+          </div>
+          <div><button class="btn btn-primary" type="submit">Save</button></div>
+        </form>
+      {% else %}
+        <p class="hint">The model list is not available yet, so the chat shows Quick / Normal / Best. The hourly job (<span class="mono">ai-dashboard-models.timer</span>) writes <span class="mono">/etc/ai-dashboard/claude-models.json</span>; once that file exists the chat offers Claude Code's real model list.</p>
+      {% endif %}
+      <div class="switch-row">
+        <p class="hint">Last test: <strong>{{ cc_last or "never" }}</strong> · Projects using it: <strong>{{ cc_projects|map(attribute="name")|join(", ") or "none yet" }}</strong></p>
+        <form method="post" action="{{ url_for('settings.test_cc') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm" type="submit">Test Claude Code</button></form>
+      </div>
+    </section>
+
+    <section class="card" id="codemagic" aria-labelledby="h-cm">
+      <h2 id="h-cm"><span class="h-ic" style="--h:150">{{ icon('upload') }}</span>Codemagic (mobile app test builds)</h2>
+      <p class="hint">Builds Android test apps (APK) of a project's Flutter apps, pointed at the <strong>beta</strong> — never at live. The download link and a QR code appear on the project page.</p>
+      <ol class="summary-list">
+        <li>Sign up at codemagic.io with GitHub and add the project's repo (Add application → GitHub).</li>
+        <li>Codemagic → Account settings → <strong>API token</strong> → Show, copy it.</li>
+        <li>Paste it below (stored encrypted, never shown again), then press <strong>Test Codemagic</strong>.</li>
+      </ol>
+      <form method="post" action="{{ url_for('settings.save_codemagic') }}" class="form-grid">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="field"><label for="cm-token">Codemagic API token {% if cm_token_mask %}<span class="hint">(saved: <span class="mono">{{ cm_token_mask }}</span> — leave empty to keep it)</span>{% endif %}</label>
+          <input id="cm-token" name="token" type="password" autocomplete="off"></div>
+        <div class="chip-row"><button class="btn btn-primary" type="submit">Save</button>
+          {% if cm_token_mask %}<button class="btn btn-danger" type="submit" name="clear" value="1">Remove token</button>{% endif %}</div>
+      </form>
+      <div class="switch-row">
+        <p class="hint">Last test: <strong>{{ cm_last or "never" }}</strong></p>
+        <form method="post" action="{{ url_for('settings.test_codemagic') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm" type="submit">Test Codemagic</button></form>
+      </div>
+    </section>
+
+    <section class="card" id="telegram" aria-labelledby="h-tg">
+      <h2 id="h-tg"><span class="h-ic" style="--h:199">{{ icon('send') }}</span>Telegram alerts</h2>
+      <p class="hint">Site down, home page changed, sign-in locked, backup failed — straight to your phone.</p>
+      <ol class="summary-list">
+        <li class="{{ 'done-step' if tg_token_mask }}"><strong>Bot token</strong> — from @BotFather in Telegram.{% if tg_token_mask %} Saved: <span class="mono">{{ tg_token_mask }}</span>{% endif %}</li>
+        <li class="{{ 'done-step' if tg_chats }}"><strong>Connect your chat</strong> — send the bot a one-time code.</li>
+        <li><strong>Send a test alert.</strong></li>
+      </ol>
+      <form method="post" action="{{ url_for('settings.save_telegram') }}" class="form-grid">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="field"><label for="tg-token">Bot token {% if tg_token_mask %}<span class="hint">(leave empty to keep it)</span>{% endif %}</label>
+          <input id="tg-token" name="token" type="password" autocomplete="off" placeholder="7412345678:AAH…"></div>
+        <div class="chip-row"><button class="btn btn-primary" type="submit">Save bot</button>
+          {% if tg_token_mask %}<button class="btn btn-danger" type="submit" name="clear_token" value="1">Remove bot</button>{% endif %}</div>
+      </form>
+      {% if tg_token_mask %}
+        {% if tg_code %}
+          <div class="linkbox">
+            <strong>Open your bot in Telegram, tap Start, and send this text:</strong>
+            <code class="mono" style="font-size:18px">{{ tg_code }}</code>
+            <form method="post" action="{{ url_for('settings.telegram_connect') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-primary" type="submit">I sent it — connect</button></form>
+          </div>
+        {% else %}
+          <form method="post" action="{{ url_for('settings.telegram_code') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm" type="submit">{{ icon('plus') }}Connect a Telegram chat</button></form>
+        {% endif %}
+        {% if tg_chats %}
+          <div class="rows">
+            {% for c in tg_chats %}
+              <div class="row"><span class="row-lead"><span class="row-ic" style="--h:199">{{ icon('send') }}</span><span class="row-main"><span class="row-title">{{ c.name }}</span><span class="row-sub">Gets every alert</span></span></span>
+                <span class="row-side"><form method="post" action="{{ url_for('settings.telegram_remove', chat_id=c.id) }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm" type="submit">Remove</button></form></span></div>
+            {% endfor %}
+          </div>
+          <form method="post" action="{{ url_for('settings.telegram_test') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-primary" type="submit">{{ icon('bell') }}Send a test alert</button></form>
+        {% endif %}
+      {% endif %}
+    </section>
+
+    <section class="card" id="servers" aria-labelledby="h-srv">
+      <h2 id="h-srv"><span class="h-ic" style="--h:215">{{ icon('db') }}</span>Servers</h2>
+      <p class="hint">The servers your beta and live sites run on. The dashboard signs in with <strong>its own SSH key</strong> — no password is ever stored. Claude never gets this access; only the Beta deploy / Live → Beta sync buttons use it.</p>
+      {% if ssh_public_key %}
+        <div class="field"><label for="srv-key">1 · Add this key on each server <span class="hint">(append it to <span class="mono">~/.ssh/authorized_keys</span> of the user below)</span></label>
+          <textarea id="srv-key" class="mono" rows="3" readonly onclick="this.select()">{{ ssh_public_key }}</textarea></div>
+      {% else %}<p class="hint">Could not create the dashboard's SSH key (ssh-keygen missing on this machine).</p>{% endif %}
+      {% if servers %}
+        <div class="rows">
+          {% for s in servers %}
+            <div class="row"><span class="row-lead"><span class="row-ic" style="--h:215">{{ icon('db') }}</span>
+              <span class="row-main"><span class="row-title">{{ s.name }}</span><span class="row-sub"><span class="mono">{{ s.ssh_user }}@{{ s.host }}{% if s.port != 22 %}:{{ s.port }}{% endif %}</span>{% if s.last_result %} · {{ s.last_result }}{% endif %}</span></span></span>
+              <span class="row-side">
+                {% if s.last_ok_at and s.last_result.startswith("OK") %}<span class="pill pill-ok">Connected</span>{% elif s.last_result %}<span class="pill pill-bad">Failed</span>{% else %}<span class="pill">Not tested</span>{% endif %}
+                <form method="post" action="{{ url_for('settings.server_test', server_id=s.id) }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-primary" type="submit">Test</button></form>
+                {% if s.host_key %}<form method="post" action="{{ url_for('settings.server_forget_key', server_id=s.id) }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm" type="submit" title="Only if the server was rebuilt / moved">Forget host key</button></form>{% endif %}
+                <form method="post" action="{{ url_for('settings.server_delete', server_id=s.id) }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm" type="submit">Remove</button></form>
+              </span></div>
+          {% endfor %}
+        </div>
+      {% endif %}
+      <form method="post" action="{{ url_for('settings.server_add') }}" class="form-grid">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <p><strong>2 · Add a server</strong></p>
+        <div class="form-row two">
+          <div class="field"><label for="srv-name">Short name</label><input id="srv-name" name="name" placeholder="VPS 1" required></div>
+          <div class="field"><label for="srv-host">Address (IP or host name)</label><input id="srv-host" name="host" class="mono" placeholder="203.0.113.10" required></div>
+        </div>
+        <div class="form-row two">
+          <div class="field"><label for="srv-user">SSH user</label><input id="srv-user" name="user" class="mono" placeholder="deploy" required></div>
+          <div class="field"><label for="srv-port">SSH port</label><input id="srv-port" name="port" type="number" min="1" max="65535" value="22"></div>
+        </div>
+        <div><button class="btn btn-primary" type="submit">{{ icon('plus') }}Add server</button></div>
+      </form>
+      <p class="hint">3 · Press <strong>Test</strong>. The first test saves the server's identity; if it ever changes, the dashboard refuses to connect (protects against a fake server).</p>
+    </section>
+
+    <section class="card" id="monitor" aria-labelledby="h-mon">
+      <h2 id="h-mon"><span class="h-ic" style="--h:150">{{ icon('activity') }}</span>Site monitor</h2>
+      <p class="hint">Every 5 minutes each watched project's live site is opened once. Down twice in a row (about 10 minutes) or the home page text changed twice in a row → red + alert. It only reads the home page; it never changes anything on the server.</p>
+      <p class="hint">Last check: <strong>{{ mon_last[:16].replace("T", " ") ~ " UTC" if mon_last else "never" }}</strong> · Watching <strong>{{ watched|length }}</strong> site{{ "" if watched|length == 1 else "s" }}. Turn watching on / off in each project's Settings tab.</p>
+      {% if watched %}
+        <div class="rows">
+          {% for p in watched %}{% set lv = p.env("live") %}
+            <a class="row row-btn" href="{{ url_for('projects.detail', project_id=p.id) }}">
+              <span class="row-lead"><span class="pav xs" style="--h:{{ hue(p) }}">{{ initials(p.name) }}</span>
+                <span class="row-main"><span class="row-title">{{ p.name }}</span><span class="row-sub mono">{{ lv.url if lv else "no live address" }}</span></span></span>
+              <span class="row-side">{% if not lv or not lv.last_check_at %}<span class="pill">Not checked</span>
+                {% elif p.incident %}<span class="pill pill-bad">{{ "Down" if lv.down_since else "Changed" }}</span>
+                {% else %}<span class="pill pill-ok">Up · {{ lv.last_response_ms }} ms</span>{% endif %}</span>
+            </a>
+          {% endfor %}
+        </div>
+      {% endif %}
+      <form method="post" action="{{ url_for('settings.monitor_run') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-primary" type="submit">{{ icon('sync') }}Check all sites now</button></form>
+    </section>
+  </div>
+{% endblock %}

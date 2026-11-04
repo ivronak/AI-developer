@@ -1,0 +1,12 @@
+[Unit]
+Description=AI Project Dashboard — site monitor, reminders, AI budget alerts, GitHub sync (every 5 minutes)
+
+[Service]
+Type=oneshot
+User=__SITEUSER__
+Group=__SITEUSER__
+WorkingDirectory=__APP__
+EnvironmentFile=/etc/ai-dashboard/dashboard.env
+Environment=FLASK_APP=wsgi.py
+UMask=0007
+ExecStart=/bin/sh -c '__APP__/venv/bin/flask monitor; __APP__/venv/bin/flask github-sync || true'

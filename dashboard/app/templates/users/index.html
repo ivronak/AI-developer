@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/users.css') }}">{% endblock %}
+{% block content %}
+  <div class="section-head">
+    <div class="page-head">
+      <h1>Users &amp; log</h1>
+      <p>Each person has their own sign-in. Nobody shares an account.</p>
+    </div>
+    <button class="btn btn-primary" type="button" data-open="dlg-new">{{ icon('plus') }}Add user</button>
+  </div>
+
+  {% if new_link %}
+  <div class="linkbox" role="status">
+    <strong>Send this one-time link to {{ new_link.name }}</strong>
+    <span class="hint">They open it, set their own password, then set up the authenticator app. It works once, for 48 hours. It is shown only now.</span>
+    <code id="new-link">{{ new_link.url }}</code>
+    <div class="chip-row">
+      <button class="btn btn-sm" type="button" data-copy-text="{{ new_link.url }}">{{ icon('copy') }}Copy link</button>
+      <a class="btn btn-sm" href="https://wa.me/?text={{ ('Your sign-in link for ' ~ APP_NAME ~ ': ' ~ new_link.url)|urlencode }}" target="_blank" rel="noopener">WhatsApp</a>
+    </div>
+  </div>
+  {% endif %}
+
+  <section class="card" aria-labelledby="h-sec">
+    <div class="switch-row">
+      <div>
+        <h2 id="h-sec"><span class="h-ic" style="--h:150">{{ icon('check') }}</span>Authenticator app for everyone</h2>
+        <p class="hint">{% if require_2fa %}<strong>On:</strong> every sign-in needs the 6-digit code from the person's phone. Recommended.{% else %}<strong>Off:</strong> each person decides on their own My account page. Less safe.{% endif %}</p>
+      </div>
+      <form method="post" action="{{ url_for('users.security') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="require_2fa" value="{{ '0' if require_2fa else '1' }}">
+        <button class="btn {{ 'btn-danger' if require_2fa else 'btn-primary' }}" type="submit">{{ "Make it optional" if require_2fa else "Make it required" }}</button>
+      </form>
+    </div>
+  </section>
+
+  <div class="users">
+    {% for u in users %}
+      {% set h = 245 if u.is_owner else hue(u.id + 4) %}
+      {% set mine = u.id == current_user.id %}
+      <article class="ucard{% if not u.is_active %} is-off{% endif %}" style="--h:{{ h }}">
+        <div class="ucard-band">
+          <span class="pav{% if not u.is_active %} off{% endif %}">{{ u.initials }}</span>
+          <div class="ucard-id"><h2>{{ u.name }}{% if mine %} <span class="hint">(you)</span>{% endif %}</h2>
+            <p class="contact">{{ u.email }} · {{ u.mobile }}</p></div>
+          <span class="hpill {{ 's-ok' if u.is_active else 's-bad' }}">{{ "Access on" if u.is_active else "Access off" }}</span>
+        </div>
+        <div class="ucard-body">
+          <div class="chip-row">
+            <span class="role-chip">{{ "Owner" if u.is_owner else "Developer" }}</span>
+            {% if u.is_owner %}<span class="tech" style="--h:245">All projects</span>
+            {% else %}
+              {% for m in u.memberships %}<span class="tech" style="--h:{{ hue(m.project_id) }}">{{ m.project.name }}</span>{% else %}<span class="tag-off">No projects</span>{% endfor %}
+            {% endif %}
+          </div>
+          <dl class="kv">
+            <dt>Authenticator</dt><dd>{% if u.totp_enabled %}<span class="pill pill-ok">On</span>{% else %}<span class="pill pill-warn">Not set up</span>{% endif %}</dd>
+            <dt>Password</dt><dd>{{ "Set" if u.password_hash else "Waiting for the person to set it" }}</dd>
+            <dt>Last sign-in</dt><dd>{{ u.last_login_at|ago }}</dd>
+          </dl>
+          {% if not u.is_owner %}
+          <div class="ucard-acts">
+            <button class="btn btn-sm" type="button" data-open="dlg-edit-{{ u.id }}">Edit</button>
+            <form method="post" action="{{ url_for('users.access', uid=u.id) }}" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="on" value="{{ '0' if u.is_active else '1' }}">
+              <button class="btn btn-sm {{ 'btn-danger' if u.is_active else '' }}" type="submit">{{ "Turn access off" if u.is_active else "Turn access on" }}</button>
+            </form>
+            <button class="btn btn-sm" type="button" data-open="dlg-more-{{ u.id }}">More…</button>
+          </div>
+          {% elif mine %}
+          <div class="ucard-acts"><a class="btn btn-sm" href="{{ url_for('auth.account') }}">My account</a></div>
+          {% endif %}
+        </div>
+      </article>
+
+      {% if not u.is_owner %}
+      <dialog class="dlg dlg-wide" id="dlg-edit-{{ u.id }}">
+        <form method="post" action="{{ url_for('users.edit', uid=u.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="dlg-head"><h2>Edit {{ u.name }}</h2><button type="button" class="icon-btn" data-close aria-label="Close">{{ icon('x') }}</button></div>
+          <div class="dlg-body">
+            {% with u=u %}{% include "users/_fields.html" %}{% endwith %}
+          </div>
+          <div class="dlg-foot"><button type="button" class="btn" data-close>Cancel</button><button class="btn btn-primary" type="submit">Save</button></div>
+        </form>
+      </dialog>
+      <dialog class="dlg" id="dlg-more-{{ u.id }}">
+        <div class="dlg-head"><h2>{{ u.name }}</h2><button type="button" class="icon-btn" data-close aria-label="Close">{{ icon('x') }}</button></div>
+        <div class="dlg-body">
+          <form method="post" action="{{ url_for('users.reset_2fa', uid=u.id) }}" class="form-grid">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <p><strong>Reset authenticator</strong><br><span class="hint">Lost or new phone. They scan a new QR code at their next sign-in.</span></p>
+            <div><button class="btn btn-sm" type="submit">Reset authenticator</button></div>
+          </form>
+          <form method="post" action="{{ url_for('users.setup_link', uid=u.id) }}" class="form-grid">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <p><strong>New set-password link</strong><br><span class="hint">Forgotten password. Their old password stops working right away.</span></p>
+            <div><button class="btn btn-sm btn-danger" type="submit">Make a new link</button></div>
+          </form>
+        </div>
+        <div class="dlg-foot"><button type="button" class="btn" data-close>Close</button></div>
+      </dialog>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  <dialog class="dlg dlg-wide" id="dlg-new">
+    <form method="post" action="{{ url_for('users.create') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="dlg-head"><h2>Add user</h2><button type="button" class="icon-btn" data-close aria-label="Close">{{ icon('x') }}</button></div>
+      <div class="dlg-body">
+        {% with u=None %}{% include "users/_fields.html" %}{% endwith %}
+        <p class="hint">You get a one-time link to send them. They set their own password with it — nobody else ever knows it.</p>
+      </div>
+      <div class="dlg-foot"><button type="button" class="btn" data-close>Cancel</button><button class="btn btn-primary" type="submit">Add user</button></div>
+    </form>
+  </dialog>
+
+  <section class="log-sec" id="log">
+    <div class="section-head"><h2>Activity log</h2><span class="hint">{{ total }} entr{{ "y" if total == 1 else "ies" }}{% if total > LOG_LIMIT %} · newest {{ LOG_LIMIT }} shown{% endif %}</span></div>
+    <form class="filters" method="get" action="{{ url_for('users.index') }}#log">
+      <div class="field"><label for="l-user">Person</label>
+        <select id="l-user" name="user" data-autosubmit>
+          <option value="">Everyone</option>
+          <option value="0"{% if f.user == "0" %} selected{% endif %}>System / client</option>
+          {% for u in users %}<option value="{{ u.id }}"{% if f.user == u.id|string %} selected{% endif %}>{{ u.name }}</option>{% endfor %}
+        </select></div>
+      <div class="field"><label for="l-project">Project</label>
+        <select id="l-project" name="project" data-autosubmit>
+          <option value="">All projects</option>
+          {% for p in projects %}<option value="{{ p.id }}"{% if f.project == p.id|string %} selected{% endif %}>{{ p.name }}</option>{% endfor %}
+        </select></div>
+      <div class="field"><label for="l-from">From</label><input id="l-from" name="from" type="date" value="{{ f['from'] }}" data-autosubmit></div>
+      <div class="field"><label for="l-to">To</label><input id="l-to" name="to" type="date" value="{{ f['to'] }}" data-autosubmit></div>
+    </form>
+    <div class="rows">
+      {% set ns = namespace(day="") %}
+      {% for l in logs %}
+        {% set lt = l.created_at|local %}{% set day = lt.strftime("%-d %b %Y") %}
+        {% if day != ns.day %}<div class="day-head">{{ day }}</div>{% set ns.day = day %}{% endif %}
+        {% set ic = ACTION_ICON.get(l.action, ("activity", 240)) %}
+        <div class="row">
+          <div class="row-lead"><span class="row-ic" style="--h:{{ ic[1] }}">{{ icon(ic[0]) }}</span>
+            <div class="row-main">
+              <span class="row-title">{{ l.action }}{% if l.project %} · <span class="pav xs" style="--h:{{ hue(l.project) }}">{{ initials(l.project.name) }}</span> {{ l.project.name }}{% endif %}</span>
+              {% if l.details %}<span class="row-sub">{{ l.details }}</span>{% endif %}
+              {% if l.prompt_text %}<span class="log-prompt">Prompt: {{ l.prompt_text }}</span>{% endif %}
+            </div>
+          </div>
+          <div class="row-side"><span class="row-sub">{{ l.user.name if l.user else ("Client" if l.action.startswith("Client") else "System") }}<br>{{ lt.strftime("%H:%M") }}{% if l.ip %} · {{ l.ip }}{% endif %}</span></div>
+        </div>
+      {% else %}
+        <div class="empty">No activity matches.</div>
+      {% endfor %}
+    </div>
+  </section>
+  <script>
+    document.addEventListener("change", function (e) { if (e.target.matches("[data-autosubmit]")) e.target.form.submit(); });
+    document.addEventListener("click", function (e) {
+      var b = e.target.closest("[data-copy-text]"); if (!b) return;
+      try { navigator.clipboard.writeText(b.getAttribute("data-copy-text")).then(function () { UI.toast("Link copied."); }); } catch (err) {}
+    });
+  </script>
+{% endblock %}

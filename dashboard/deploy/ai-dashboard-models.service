@@ -1,0 +1,13 @@
+[Unit]
+Description=AI dashboard: save the VPS Claude Code's model list and a few facts about it (plan, masked e-mail hint, connector names, service state)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Environment=HOME=/root
+Environment=DISABLE_AUTOUPDATER=1
+ExecStart=/usr/local/sbin/aidash-claude-models
+TimeoutStartSec=240
+PrivateTmp=true
+NoNewPrivileges=true

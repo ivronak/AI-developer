@@ -1,0 +1,615 @@
+{% extends "base.html" %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/project.css') }}">{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/project.js') }}" defer></script>{% endblock %}
+{% macro pill(c) %}{% set si = status_info(c) %}<span class="pill{% if si[1] %} pill-{{ si[1] }}{% endif %}">{{ si[0] }}</span>{% endmacro %}
+{% block content %}
+{% set owner = current_user.is_owner %}
+{% set beta, live = r.beta, r.live %}
+  {% set ready = beta and beta.server_id and beta.deploy_path %}
+  {% set why = busy or (not ready and "Set the beta server and folder first (Settings tab → Servers & deploy).") or "" %}
+  {% set live_ready = live and live.server_id and live.deploy_path %}
+  {% set lwhy = busy or (not live_ready and "Set the live server and folder first (Settings tab → Servers & deploy).") or "" %}
+  <section class="phead" style="--h:{{ hue(p) }}">
+    <span class="pav{% if not p.is_active %} off{% endif %}">{{ initials(p.name) }}</span>
+    <div class="phead-id">
+      <h1>{{ p.name }} <span class="hpill s-{{ r.level }}">{{ r.label }}</span></h1>
+      <p class="phead-sub"><span>{{ p.client_name }}{% if not p.is_active %} · Dormant{% endif %}</span>
+        <span class="repo">{{ icon('github') }}<span>{{ p.github_repo or "No repo yet" }}</span></span>
+        {% for t in p.tech_stack %}<span class="tech" style="--h:{{ tech_hue(t) }}">{{ t }}</span>{% endfor %}
+        <span class="phead-stat">{{ r.open }} open · {{ r.waiting }} waiting approval</span></p>
+    </div>
+    <div class="phead-acts" aria-label="Project actions">
+      <button class="btn btn-sm" type="button" title="Copy live data to beta" {% if why %}data-soon="{{ why }}"{% else %}data-open="dlg-sync"{% endif %}>{{ icon('sync') }}<span class="lbl">Sync</span></button>
+      <form method="post" action="{{ url_for('projects.start_job', project_id=p.id, kind='beta_deploy') }}" class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm" {% if why %}type="button" data-soon="{{ why }}"{% else %}type="submit"{% endif %}>{{ icon('upload') }}<span class="lbl">Beta deploy</span></button>
+      </form>
+      <button class="btn btn-sm" type="button" {% if not owner %}disabled title="Owner only"{% elif lwhy %}data-soon="{{ lwhy }}"{% elif not rb_cur %}data-soon="There is no earlier live version to go back to."{% else %}data-open="dlg-rollback"{% endif %}>{{ icon('undo') }}<span class="lbl">Rollback</span></button>
+      <button class="btn btn-sm btn-primary" type="button" {% if not owner %}disabled title="Owner only"{% elif lwhy %}data-soon="{{ lwhy }}"{% else %}data-open="dlg-golive"{% endif %}>{{ icon('rocket') }}<span class="lbl">Go Live</span></button>
+    </div>
+  </section>
+  {% if p.needs_setup %}
+    <div class="pc-now s-warn">{{ icon('plus') }}<span>New from GitHub — fill in the client, hosting and addresses<small>{% if owner %}Open the Settings tab below.{% else %}The owner fills these in.{% endif %}</small></span></div>
+  {% endif %}
+  {% if p.repo_missing %}
+    <div class="pc-now s-bad">{{ icon('github') }}<span>The repo {{ p.github_repo }} is no longer on GitHub<small>Renamed or deleted? Fix the repo name in the Settings tab.</small></span></div>
+  {% endif %}
+  {% if r.level != "ok" %}
+    <div class="pc-now s-{{ r.level }}">{{ icon('alert') }}<span>{{ r.reason }}<small>{{ "Roll back to the last good version, or ask Claude to debug it on beta." if r.level == "bad" else ("Daily backups are not built yet (next step) — Go Live always takes a snapshot first." if "backup" in r.reason|lower else "Needs a look.") }}</small></span></div>
+    {% if owner and p.incident == "Home page changed unexpectedly" %}
+      <form method="post" action="{{ url_for('projects.accept_page', project_id=p.id) }}" class="chip-row">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <span class="hint">Was this change expected (e.g. the client edited the page)?</span>
+        <button class="btn btn-sm" type="submit">This change is OK</button>
+        {% if live %}<a class="btn btn-sm" href="{{ live.url }}" target="_blank" rel="noopener">{{ icon('ext') }}Look at the live site</a>{% endif %}
+      </form>
+    {% endif %}
+  {% endif %}
+  {% if repo_problem %}
+    <div class="pc-now s-warn wrap">{{ icon('alert') }}<span>{{ repo_problem }}<small>Go Live is blocked so the wrong code can't go live.</small></span></div>
+  {% endif %}
+
+  <section class="envs" aria-label="Environments">
+    {% if beta %}
+    <article class="env">
+      <div class="env-top"><span class="env-name"><span class="h-ic" style="--h:215">{{ icon('sync') }}</span>Beta</span>
+        <a class="env-url mono" href="{{ beta.url }}" target="_blank" rel="noopener">{{ beta.url.replace("https://", "") }}</a>
+        <span class="mono env-commit">{{ beta.current_commit or "—" }}</span></div>
+      <p class="env-meta">Data from live {{ beta.last_sync_at|ago if beta.last_sync_at else "never synced" }} · {{ {"off": "messages off", "test": "messages to test numbers", "on": "MESSAGES ON"}[beta.message_mode] }} · payments {% if beta.payment_mode == "sandbox" %}sandbox{% else %}<strong>LIVE</strong>{% endif %}</p>
+      {% if beta_login %}
+      <details class="env-login"><summary>{{ icon('check') }} Locked — show login</summary>
+        <p>user <span class="mono">{{ beta_login[0] }}</span> · password <span class="mono">{{ beta_login[1] }}</span>
+          <button class="link-btn" type="button" data-copy-v="{{ beta_login[1] }}">Copy</button>
+          · <a class="link-btn" href="https://{{ beta_login[0]|urlencode }}:{{ beta_login[1]|urlencode }}@{{ beta.url.split('//')[-1] }}" target="_blank" rel="noopener noreferrer">Open beta (signed in)</a></p>
+      </details>{% endif %}
+    </article>
+    {% endif %}
+    {% if live %}
+    <article class="env env-live">
+      <div class="env-top"><span class="env-name"><span class="h-ic" style="--h:150">{{ icon('rocket') }}</span>Live</span>
+        <a class="env-url mono" href="{{ live.url }}" target="_blank" rel="noopener">{{ live.url.replace("https://", "") }}</a>
+        <span class="mono env-commit">{{ live.current_release or live.current_commit or "—" }}</span></div>
+      <p class="env-meta">{% if r.last_deploy %}Deployed {{ r.last_deploy.created_at|ago }}{% else %}Never deployed from here{% endif %}
+        · {% if not p.monitor_enabled %}not watched{% elif live.last_check_at %}checked {{ live.last_check_at|ago }}{% if live.last_http_status %} · {{ live.last_response_ms }} ms{% endif %}{% else %}watched{% endif %}
+        {% if p.monitor_enabled %}· <form method="post" action="{{ url_for('projects.check_now', project_id=p.id) }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link-btn" type="submit">Check now</button></form>{% endif %}</p>
+    </article>
+    {% endif %}
+  </section>
+
+  {% if running_job %}
+    <div class="agent-run" data-job-poll="{{ url_for('projects.job_status', job_id=running_job.id) }}">
+      <span class="spin" aria-hidden="true"></span><span><strong>{{ {"beta_deploy": "Beta deploy", "sync": "Live → Beta sync", "go_live": "Go Live", "rollback": "Rollback", "beta_setup": "Automatic beta setup", "beta_lock": "Beta password", "live_convert": "Switch to release folders", "live_steps": "Claude writes the live steps", "beta_api": "Opening the beta API for the apps", "change_debug": "Claude checks the beta"}.get(running_job.kind, running_job.kind) }} running</strong> · <span data-note>{{ running_job.note }}</span><small>Started by {{ running_job.by_user.name if running_job.by_user else "System" }} — this page updates by itself.</small></span>
+    </div>
+  {% endif %}
+
+  {% if owner %}
+  {% set approved = open_changes|selectattr("status", "equalto", "approved")|list %}
+  {% set unapproved = open_changes|selectattr("status", "in", ["passed", "client", "changes"])|list %}
+  <dialog class="dlg dlg-wide" id="dlg-golive">
+    <form method="post" action="{{ url_for('projects.go_live', project_id=p.id) }}" autocomplete="off">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="dlg-head"><h2>Go Live · {{ p.name }}</h2><button type="button" class="icon-btn" data-close aria-label="Close">{{ icon('x') }}</button></div>
+      <div class="dlg-body">
+        <div><div class="label">Goes live</div>
+          {% if approved %}<ul class="summary-list">{% for c in approved %}<li>{{ c.title }} <span class="pill pill-ok">Approved</span></li>{% endfor %}</ul>
+          {% else %}<p class="msg msg-warn">No change is approved by the client yet.</p>{% endif %}</div>
+        {% if unapproved %}
+          <div class="panel-box"><label class="check"><input type="checkbox" name="override" value="1" id="gl-override"> <span>Also send changes the client has <strong>not</strong> approved ({{ unapproved|length }}): {{ unapproved|map(attribute="title")|join(" · ") }}</span></label>
+            <div class="field" id="gl-reason-box" hidden><label for="gl-reason">Reason (kept in the activity log)</label><textarea id="gl-reason" name="reason" placeholder="e.g. Client confirmed on a phone call"></textarea></div></div>
+        {% endif %}
+        <dl class="kv"><dt>Live now</dt><dd class="mono">{{ (live.current_commit or "—") if live else "—" }}</dd>
+          <dt>Last snapshot</dt><dd>{{ last_snap.created_at|ago if last_snap else "none" }} — a fresh one is taken first</dd></dl>
+        <ol class="summary-list steps-list"><li>Check live for direct edits on the server</li><li>Snapshot of the live database</li><li>Build the release and run the tests</li><li>Deploy to live and check the site</li><li>Close watch for 15 minutes</li></ol>
+        <div class="field"><label for="gl-code">Authenticator code</label><input id="gl-code" name="code" inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" required placeholder="6 digits from your phone" class="mono otp-in"></div>
+      </div>
+      <div class="dlg-foot"><button type="button" class="btn" data-close>Cancel</button><button class="btn btn-primary" type="submit">{{ icon('rocket') }}Go Live</button></div>
+    </form>
+  </dialog>
+  {% if rb_cur %}
+  <dialog class="dlg" id="dlg-rollback">
+    <form method="post" action="{{ url_for('projects.rollback', project_id=p.id) }}" autocomplete="off">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="deployment" value="{{ rb_cur.id }}">
+      <div class="dlg-head"><h2>Rollback · {{ p.name }}</h2><button type="button" class="icon-btn" data-close aria-label="Close">{{ icon('x') }}</button></div>
+      <div class="dlg-body">
+        <dl class="kv"><dt>Live now</dt><dd><span class="mono">{{ rb_cur.commit }}</span> · {{ rb_cur.created_at|stamp }}</dd>
+          <dt>Go back to</dt><dd><span class="mono">{{ rb_target[:7] }}</span> (the version live ran before)</dd></dl>
+        {% if rb_cur.snapshot and rb_cur.snapshot.ok %}
+          <label class="check"><input type="checkbox" name="with_db" value="1"> <span>Also restore the database from the snapshot of {{ rb_cur.snapshot.created_at|stamp }}. Data entered after it is lost — leave this off unless the release broke the data.</span></label>
+        {% endif %}
+        <p class="hint">The changes in that release go back to “In beta” so Claude can fix them.</p>
+        <div class="field"><label for="rb-code">Authenticator code</label><input id="rb-code" name="code" inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" required placeholder="6 digits from your phone" class="mono otp-in"></div>
+      </div>
+      <div class="dlg-foot"><button type="button" class="btn" data-close>Cancel</button><button class="btn btn-danger" type="submit">{{ icon('undo') }}Roll back</button></div>
+    </form>
+  </dialog>
+  {% endif %}
+  {% endif %}
+
+  <dialog class="dlg" id="dlg-sync">
+    <form method="post" action="{{ url_for('projects.start_job', project_id=p.id, kind='sync') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="dlg-head"><h2>Copy live data to beta?</h2><button type="button" class="icon-btn" data-close aria-label="Close">{{ icon('x') }}</button></div>
+      <div class="dlg-body">
+        <p>The <strong>beta database is replaced</strong> with a fresh copy of the live database. Anything typed on beta only is lost. Live is only read — nothing on live changes.</p>
+        <p class="hint">After the copy, beta's safety switches are applied again: messages {{ {"off": "off", "test": "to test numbers only", "on": "ON — real users"}[beta.message_mode] if beta else "off" }}, payments {{ beta.payment_mode if beta else "sandbox" }}.</p>
+      </div>
+      <div class="dlg-foot"><button type="button" class="btn" data-close>Cancel</button><button class="btn btn-primary" type="submit">{{ icon('sync') }}Copy live → beta</button></div>
+    </form>
+  </dialog>
+
+  <nav class="tabs" role="tablist" aria-label="Project sections" id="tabs">
+    {% for key, label in [("chat", "Chat"), ("changes", "Changes"), ("apps", "Apps"), ("deploys", "Deploys"), ("backups", "Backups"), ("settings", "Settings")] %}
+      {% if key != "apps" or p.github_repo %}<button type="button" role="tab" data-tab="{{ key }}" aria-selected="{{ 'true' if key == 'chat' else 'false' }}">{{ label }}{% if key == "apps" and app_todo %} <span class="tab-dot" aria-label="needs a build"></span>{% endif %}</button>{% endif %}
+    {% endfor %}
+  </nav>
+
+  {# ---------- Chat ---------- #}
+  <section class="tab-panel" data-panel="chat">
+    <div class="pick" role="group" aria-label="Pick a change">
+      <button type="button" data-pick="new" data-lock="" aria-pressed="{{ 'false' if current else 'true' }}">{{ icon('plus') }}<span class="t">New change</span></button>
+      {% for c in open_changes %}{% set si = status_info(c) %}
+        <button type="button" data-pick="{{ c.id }}" data-debug="{{ '1' if c.agent_debug else '' }}" data-lock="{% if c.status in ('approved', 'live') %}This change is approved — start a new change for anything else.{% elif c.agent_state in ('queued', 'working') %}Claude is working on this change…{% endif %}" aria-pressed="{{ 'true' if current and current.id == c.id else 'false' }}"><span class="sdot{% if si[1] %} sdot-{{ si[1] }}{% endif %}"></span><span class="t">{{ c.title }}</span></button>
+      {% endfor %}
+    </div>
+
+    <div data-change="new" {% if current %}hidden{% endif %}>
+      {% if p.ai_engine == "claude_code" %}<p class="hint">{{ icon('activity') }} This project uses <strong>Claude Code on the server</strong> — one ongoing session that remembers earlier work.</p>{% endif %}
+      <p class="intro">Describe the change the client asked for. Add a screenshot if it helps. Claude makes it on <strong>its own branch, on beta only</strong>, and runs the tests — live is never touched.</p>
+    </div>
+
+    {% for c in open_changes %}{% set idx = STEP_INDEX[c.status] %}{% set warn = c.status == "changes" or (c.status == "beta" and c.tests_total is not none and not c.tests_ok) %}
+      <div data-change="{{ c.id }}" class="tab-panel" {% if not current or current.id != c.id %}hidden{% endif %}>
+        <article class="ccard">
+          <div class="ccard-head"><div><h2>{{ c.title }}</h2><p class="muted">Change #{{ c.id }} · started {{ c.created_at|ago }} by {{ c.requested_by.name if c.requested_by else "—" }} · <span class="mono">{{ c.branch or "" }}</span>{% if c.agent_cost_usd %} · AI cost ${{ "%.3f"|format(c.agent_cost_usd) }} · {{ PRESETS.get(c.agent_preset, PRESETS["normal"])[0] }}{% endif %}</p></div>{{ pill(c) }}</div>
+          <ol class="stepper" aria-label="Progress">
+            {% for key, label in STEPS %}
+              <li class="{% if loop.index0 < idx %}done{% elif loop.index0 == idx %}now{% if warn %} warn{% endif %}{% endif %}">{{ label }}</li>
+            {% endfor %}
+          </ol>
+          {% if c.tests_total is not none %}<p class="tests {{ 'tests-ok' if c.tests_ok else 'tests-bad' }}">Tests: {{ c.tests_passed }} / {{ c.tests_total }} passed</p>{% endif %}
+          {% if beta and c.status in ("passed", "client", "changes", "approved") and c.agent_state not in ("queued", "working") %}
+            {% if on_beta(c) %}<p class="hint">{{ icon('check') }} This version is on the beta site.</p>
+            {% elif not running_job or running_job.kind != "beta_deploy" %}<p class="client-said"><strong>Not on the beta site yet.</strong> Press <strong>Beta deploy</strong> above to put it there.</p>{% endif %}
+          {% endif %}
+          {% if current and c.id == current.id and app_todo %}
+            <div class="pc-now s-warn">{{ icon('alert') }}<span>This change changed the app code: {{ app_todo|join(", ") }}
+              <small>Check the web on beta first; when it looks right, build the test app{{ "s" if app_todo|length > 1 }}:</small></span></div>
+            <div class="chip-row">{% for d in app_todo %}
+              <form method="post" action="{{ url_for('projects.apps_build', project_id=p.id) }}" class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="app_dir" value="{{ d }}"><input type="hidden" name="change_id" value="{{ c.id }}">
+                <button class="btn btn-sm btn-primary" type="submit">{{ icon('upload') }}Build test app · {{ d }}</button></form>{% endfor %}</div>
+          {% endif %}
+          {% if c.files %}<details class="files-box"><summary>{{ c.files|length }} file{{ "s" if c.files|length != 1 }} changed</summary><ul class="files">{% for f in c.files %}<li>{{ f }}</li>{% endfor %}</ul></details>{% endif %}
+          {% set a = c.approval %}
+          {% if c.status == "client" and a %}{% set link = approval_link(a) %}
+            {% if approval_open(a) and link %}
+              <div class="share"><div>Sent {{ a.sent_at|ago }} · link closes {{ a.expires_at|stamp }} or after the client replies.</div>
+                <div class="share-link">{{ link }}</div>
+                <div class="ccard-acts"><button class="btn btn-sm" type="button" data-copy-v="{{ link }}">{{ icon('copy') }}Copy link</button>
+                  <a class="btn btn-sm" href="https://wa.me/?text={{ ('Hi, please check this change on the test site and approve it: ' ~ link)|urlencode }}" target="_blank" rel="noopener noreferrer">WhatsApp</a>
+                  <a class="btn btn-sm" href="{{ link }}" target="_blank" rel="noopener noreferrer">{{ icon('ext') }}Open as client</a></div></div>
+            {% else %}
+              <div class="client-said"><strong>The client link is closed</strong> (it expired or was replaced). Use “New link” below to send it again.</div>
+            {% endif %}
+          {% elif c.status == "changes" and a %}
+            <div class="client-said"><strong>Client asked for changes:</strong> {{ a.comment }}</div>
+          {% elif c.status == "approved" and a %}
+            <p class="reason reason-ok">Client approved {{ a.decided_at|ago if a.decided_at else "" }}{% if a.recorded_by %} (recorded by {{ a.recorded_by.name }}){% endif %}.</p>
+          {% endif %}
+          {% for q in open_questions.get(c.id, []) %}
+            <form class="ask-card{% if q.kind in ('permission', 'root') %} ask-perm{% endif %}" method="post" action="{{ url_for('projects.answer_question', change_id=c.id, qid=q.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <div class="ask-head">{{ icon('alert') }}<strong>{{ "Claude asks to run a ROOT command" if q.kind == "root" else "Claude asks for permission" if q.kind == "permission" else "Claude is asking for your input" }}</strong><time>{{ q.created_at|ago }}</time></div>
+              <div class="md">{{ q.question|md }}</div>
+              {% if q.code %}<pre class="ask-code{% if q.kind == 'root' %} ask-code-full{% endif %}" aria-label="Exactly what will run">{{ q.code }}</pre><p class="hint">Shown exactly as it will run · {{ q.code|length }} characters · {{ q.code.split("\n")|length }} line{{ "" if q.code.split("\n")|length == 1 else "s" }}</p>{% endif %}
+              {% if q.kind in ("permission", "root") and not owner %}<p class="hint">Only the owner can give permission.</p>
+              {% elif q.kind == "root" %}
+                <div class="ask-root">
+                  <label for="ac-{{ q.id }}">Authenticator code (6 digits)</label>
+                  <input id="ac-{{ q.id }}" name="authcode" inputmode="numeric" autocomplete="one-time-code" maxlength="7" class="mono" placeholder="123456" aria-describedby="ac-h-{{ q.id }}">
+                  <p class="hint" id="ac-h-{{ q.id }}">From the app you linked on the server. The code works for this command only, once.</p>
+                  <div class="ask-opts"><button class="btn btn-sm btn-primary" type="submit" name="answer" value="Run as root">Run as root</button><button class="btn btn-sm" type="submit" name="answer" value="Deny">Deny</button></div>
+                </div>
+              {% else %}
+                {% if q.options %}<div class="ask-opts">{% for o in q.options %}<button class="btn btn-sm" type="submit" name="answer" value="{{ o }}">{{ o }}</button>{% endfor %}</div>
+                {% elif q.kind == "permission" %}<div class="ask-opts"><button class="btn btn-sm btn-primary" type="submit" name="answer" value="Approved">Approve</button><button class="btn btn-sm" type="submit" name="answer" value="Denied — don't do it">Deny</button></div>{% endif %}
+                <div class="ask-other"><input name="note" placeholder="{{ 'Or write your own answer…' if q.options or q.kind != 'permission' else 'Add a note (optional)…' }}" aria-label="Your answer">
+                  <button class="btn btn-sm" type="submit">Send</button></div>
+              {% endif %}
+            </form>
+          {% endfor %}
+          {% if c.agent_state in ("queued", "working") %}
+            <div class="agent-run agent-live" data-poll="{{ url_for('projects.change_status', change_id=c.id) }}">
+              <span class="spin" aria-hidden="true"></span><span><strong>Claude is working</strong> · <span data-note>{{ c.agent_note }}</span><small>Cost so far $<span data-cost>{{ "%.2f"|format(c.agent_cost_usd or 0) }}</span> — this page updates by itself.</small></span>
+              <ol class="steps-live" data-steps>{% for st in (c.agent_steps or [])[-60:] %}<li><time>{{ st.t }}</time>{{ st.text }}</li>{% endfor %}</ol>
+            </div>
+          {% elif c.agent_state == "failed" %}
+            <div class="client-said"><strong>Claude stopped:</strong> {{ c.agent_note }}</div>
+            {% if p.ai_engine == "claude_code" and limit_stop(c) and c.status not in ("approved", "live") %}
+              <form method="post" action="{{ url_for('projects.continue_change', change_id=c.id) }}" class="continue-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-primary btn-sm" type="submit">{{ icon('send') }}Continue where Claude stopped</button>
+                <span class="hint">{% if "saved on the change" in (c.agent_note or "") %}Claude gets another {{ cc_max_turns }} steps and carries on from the work saved on the change's branch.{% else %}Claude gets another {{ cc_max_turns }} steps in the same session. Its edits so far could not be saved, so it may have to redo some of the work.{% endif %}</span>
+              </form>
+            {% endif %}
+          {% elif c.agent_state == "done" and c.agent_note %}
+            <p class="hint">{{ c.agent_note }}</p>
+          {% endif %}
+          <div class="ccard-acts">
+            {% if c.status in ("passed", "client") and c.agent_state not in ("queued", "working") %}
+              <button class="btn {{ 'btn-primary' if c.status == 'passed' or not approval_open(a) or not approval_link(a) else '' }} btn-sm" type="button" data-open="dlg-send-{{ c.id }}">{{ "Send to client" if c.status == "passed" else "New link" }}</button>
+              {% if beta %}<a class="btn btn-sm" href="{{ beta.url }}" target="_blank" rel="noopener">{{ icon('ext') }}Open beta</a>{% endif %}
+              <dialog class="dlg" id="dlg-send-{{ c.id }}">
+                <form method="post" action="{{ url_for('approve.send', change_id=c.id) }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <div class="dlg-head"><h2>Send to client</h2><button type="button" class="icon-btn" data-close aria-label="Close">{{ icon('x') }}</button></div>
+                  <div class="dlg-body">
+                    <p>Creates a one-time link for the client. No login needed. It closes after 7 days or once the client replies.{% if c.status == "client" %} The link sent before closes now.{% endif %}</p>
+                    <div class="field"><label for="checklist-{{ c.id }}">What the client should check (one per line)</label>
+                      <textarea id="checklist-{{ c.id }}" name="checklist" rows="4" required>{{ "\n".join((a.checklist if a and a.checklist else ["Open the test site", "Try: " ~ c.title, "Check that nothing else looks different"])) }}</textarea></div>
+                  </div>
+                  <div class="dlg-foot"><button type="button" class="btn" data-close>Cancel</button><button class="btn btn-primary" type="submit">Create link</button></div>
+                </form>
+              </dialog>
+            {% elif c.status == "approved" %}{% if owner %}<button class="btn btn-primary btn-sm" type="button" {% if lwhy %}data-soon="{{ lwhy }}"{% else %}data-open="dlg-golive"{% endif %}>{{ icon('rocket') }}Go Live</button>{% else %}<span class="hint">Waiting for the owner to go live.</span>{% endif %}
+            {% elif c.status == "beta" and c.agent_state not in ("queued", "working") %}<span class="hint">{{ "Tests are failing — tell Claude below what to fix, or ask it to fix the tests." if c.tests_total is not none and not c.tests_ok else "Tell Claude below what to do." }}</span>{% endif %}
+          </div>
+        </article>
+        {% macro bubble(m) %}
+            <div class="bubble {{ {'owner': 'b-owner', 'developer': 'b-owner', 'client': 'b-client'}.get(m.sender, 'b-claude') }}">
+              <span class="who">{{ m.user.name if m.user else ("Client" if m.sender == "client" else "Claude") }}</span>
+              {% if m.sender == "claude" and m.steps %}<details class="msg-steps"><summary>{{ icon('check') }} {{ m.steps|length }} step{{ "s" if m.steps|length != 1 }}</summary>
+                <ol class="steps-live">{% for st in m.steps %}<li><time>{{ st.t }}</time>{{ st.text }}</li>{% endfor %}</ol></details>{% endif %}
+              {% if m.sender == "claude" %}<div class="md{% if m.body|length > 700 %} clamp{% endif %}">{{ m.body|md }}</div>{% if m.body|length > 700 %}<button class="link-btn" type="button" data-more>Show all</button>{% endif %}
+              {% else %}<span class="plain">{{ m.body }}</span>{% endif %}
+              {% for att in m.attachments %}<a class="shot" href="{{ url_for('projects.attachment', att_id=att.id) }}" target="_blank" rel="noopener"><img src="{{ url_for('projects.attachment', att_id=att.id) }}" alt="{{ att.original_name }}" loading="lazy"></a>{% endfor %}
+              <time>{{ m.created_at|ago }}</time>
+            </div>
+        {% endmacro %}
+        <div class="thread">
+          {% set msgs = c.messages %}
+          {% if msgs|length > 6 %}
+            <details class="older"><summary>Show {{ msgs|length - 6 }} earlier message{{ "s" if msgs|length - 6 != 1 }}</summary>
+              <div class="thread">{% for m in msgs[:-6] %}{{ bubble(m) }}{% endfor %}</div></details>
+          {% endif %}
+          {% for m in msgs[-6:] %}{{ bubble(m) }}{% endfor %}
+        </div>
+      </div>
+    {% endfor %}
+
+    <form class="composer" id="composer" method="post" action="{{ url_for('projects.chat', project_id=p.id) }}" enctype="multipart/form-data" data-max-images="{{ max_images }}" data-max-mb="{{ max_image_mb }}">
+      <div class="drop-hint" id="drop-hint" hidden aria-hidden="true">Drop images here to attach them</div>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="change_id" id="composer-change" value="{{ current.id if current else '' }}">
+      <label for="msg" class="label" hidden>Message to Claude</label>
+      <textarea id="msg" name="message" required placeholder="{{ 'Tell Claude what to adjust…' if current else 'e.g. Client wants the logo bigger on the login page' }}"></textarea>
+      <ul class="shot-previews" id="shot-previews" aria-label="Screenshots to send" hidden></ul>
+      <div class="composer-bar">
+        <div class="chip-row">
+          {% if p.ai_engine == "claude_code" and cc_list %}
+          {# the Claude account (each signed in through the web), then that account's own model list, then the effort levels #}
+          {% set cc_pick = cc_list|selectattr("value", "equalto", cc_default[0])|first or cc_list[0] %}
+          {% if cc_accts %}
+          <label class="label" for="cc-account" hidden>Claude account</label>
+          <select id="cc-account" name="account" class="preset-pick" title="Which Claude account works on this">
+            {% for row in cc_accts %}<option value="{{ row.a.id }}"{% if row.default %} selected{% endif %}{% if row.a.status == "logged_out" %} disabled{% endif %}>{{ row.a.name }}{% if row.a.status == "logged_out" %} · logged out{% endif %}</option>{% endfor %}
+          </select>
+          {% for row in cc_accts %}<template id="cc-models-{{ row.a.id }}">{% for m in row.models %}<option value="{{ m.value }}" data-efforts="{{ m.supportedEffortLevels|join(',') }}">{{ m.displayName }}{% if m.description %} — {{ m.description }}{% endif %}{% if m.value in cc_credit_models %} · needs extra usage credits{% endif %}</option>{% endfor %}</template>{% endfor %}
+          {% endif %}
+          <label class="label" for="cc-model" hidden>Model</label>
+          <select id="cc-model" name="model" class="preset-pick" title="Which Claude model works on this" data-default="{{ cc_default[0] }}">
+            {% for m in cc_list %}<option value="{{ m.value }}" data-efforts="{{ m.supportedEffortLevels|join(',') }}"{% if m.value == cc_pick.value %} selected{% endif %}>{{ m.displayName }}{% if m.description %} — {{ m.description }}{% endif %}{% if m.value in cc_credit_models %} · needs extra usage credits{% endif %}</option>{% endfor %}
+          </select>
+          <label class="label" for="cc-effort" hidden>Effort</label>
+          <select id="cc-effort" name="effort" class="preset-pick" title="How hard Claude thinks: higher is slower and uses more of your plan"{% if not cc_pick.supportedEffortLevels %} disabled{% endif %}>
+            <option value="">{{ "Effort: default" if cc_pick.supportedEffortLevels else "Effort: not available" }}</option>
+            {% for lv in cc_pick.supportedEffortLevels %}<option value="{{ lv }}"{% if lv == cc_default[1] %} selected{% endif %}>Effort: {{ lv }}</option>{% endfor %}
+          </select>
+          {% else %}
+          <label class="label" for="preset" hidden>How much care</label>
+          <select id="preset" name="preset" class="preset-pick" title="Cheaper or more careful">
+            {% for key, pr in PRESETS.items() %}<option value="{{ key }}"{% if key == default_preset %} selected{% endif %}>{{ pr[0] }} — {{ pr[1] }}</option>{% endfor %}
+          </select>
+          {% endif %}
+          {% if p.ai_engine == "claude_code" %}
+          <label class="check debug-pick" title="For a bug: Sonnet 5.5, high effort, up to 120 steps (or the cost limit in Settings). Claude reproduces the problem first, finds the cause from evidence, then fixes and checks it."><input type="checkbox" name="debug" value="1" id="cc-debug"> <span>Debug mode</span></label>
+          {% endif %}
+          <label class="btn btn-sm" for="shots" title="Pick image files — or paste a copied image (Ctrl+V) or drop image files on this page">{{ icon('clip') }}Screenshot</label>
+          <input id="shots" name="shots" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+          <span class="hint" id="shot-names"></span>
+        </div>
+        <button class="btn btn-primary btn-sm" type="submit" id="composer-send">{{ icon('send') }}<span id="send-label">{{ "Send" if current else "Start change" }}</span></button>
+      </div>
+      <p class="composer-note" id="composer-locked" hidden></p>
+    </form>
+  </section>
+
+  {# ---------- Changes ---------- #}
+  <section class="tab-panel" data-panel="changes" hidden>
+    {% if changes %}
+      <div class="rows">
+        {% for c in changes %}{% set si = status_info(c) %}
+          <a class="row row-btn" href="{{ url_for('projects.detail', project_id=p.id, change=c.id) }}#chat">
+            <span class="row-lead"><span class="row-ic" style="--h:{{ {'ok': 150, 'warn': 35, 'accent': 245}.get(si[1], 220) }}">{{ icon('activity') }}</span>
+              <span class="row-main"><span class="row-title">{{ c.title }}</span><span class="row-sub">#{{ c.id }} · {{ c.requested_by.name if c.requested_by else "—" }} · {{ c.created_at|ago }}</span></span></span>
+            <span class="row-side">{{ pill(c) }}</span>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}<div class="empty">No changes yet. Start one from the Chat tab.</div>{% endif %}
+  </section>
+
+  {# ---------- Apps (mobile test builds) ---------- #}
+  {% if p.github_repo %}
+  <section class="tab-panel" data-panel="apps" hidden id="apps">
+    <div class="panel-box">
+      <h2><span class="h-ic" style="--h:285">{{ icon('upload') }}</span>Mobile apps</h2>
+      {% if p.mobile_apps %}
+        <p class="hint">Test apps are built on Codemagic and talk to the <strong>beta</strong>, never to live. They are built only when you press a button{% if current %} — from change #{{ current.id }}{% endif %}.</p>
+        <div class="chip-row">
+        {% for a in p.mobile_apps %}
+          <form method="post" action="{{ url_for('projects.apps_build', project_id=p.id) }}" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="app_dir" value="{{ a.dir }}">
+            {% if current %}<input type="hidden" name="change_id" value="{{ current.id }}">{% endif %}
+            <button class="btn btn-sm{% if a.dir in app_todo %} btn-primary{% endif %}" type="submit">{{ icon('upload') }}Build · {{ a.name }}</button>
+          </form>
+        {% endfor %}
+        <form method="post" action="{{ url_for('projects.apps_scan', project_id=p.id) }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link-btn" type="submit">Look for apps again</button></form>
+        </div>
+      {% else %}
+        <p class="hint">No mobile app found in this repo yet.</p>
+        <form method="post" action="{{ url_for('projects.apps_scan', project_id=p.id) }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm" type="submit">Look for apps in the repo</button></form>
+      {% endif %}
+    </div>
+    {% if app_builds %}
+    <div class="rows builds">
+      {% for b in app_builds %}
+        <div class="row build-row">
+          <span class="row-lead"><span class="row-ic" style="--h:{{ 150 if b.status == 'ready' else (245 if b.status in ('queued', 'building') else 35) }}">{{ icon('upload') }}</span>
+            <span class="row-main"><span class="row-title">{{ b.app_dir }}</span>
+              <span class="row-sub">{{ "change #" ~ b.change_id if b.change_id else (p.default_branch or "main") }} · {{ b.created_at|ago }}{% if b.error %} · {{ b.error }}{% endif %}</span></span></span>
+          <span class="row-side">
+            {% if b.status == "ready" and b.file_url and (not b.url_expires_at or b.url_expires_at > now_ts) %}
+              <a class="btn btn-sm btn-primary" href="{{ b.file_url }}" rel="noopener noreferrer">Download</a>
+              <details class="qr-pop"><summary class="btn btn-sm">QR</summary>
+                <div class="qr-box"><span class="qr" aria-label="QR code to open the download on a phone">{{ qr(short_dl(b)) }}</span>
+                  <span class="hint">Scan with the phone camera → install → open. Valid until {{ b.url_expires_at|stamp if b.url_expires_at else "—" }}.</span></div></details>
+            {% elif b.status in ("queued", "building") %}<span class="pill pill-accent">Building…</span>
+            {% elif b.status == "ready" %}<span class="pill">Link expired</span>
+            {% else %}<span class="pill pill-warn">{{ b.status|capitalize }}</span>{% endif %}
+          </span>
+        </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {# ---------- Deploys ---------- #}
+  <section class="tab-panel" data-panel="deploys" hidden>
+    {% if recent_jobs %}
+      <h3 class="sub-head">Recent runs</h3>
+      <div class="rows">
+        {% for j in recent_jobs %}{% set jl = {"beta_deploy": ("Beta deploy", "upload", 215), "sync": ("Live → Beta sync", "sync", 199), "go_live": ("Go Live", "rocket", 150), "rollback": ("Rollback", "undo", 24), "beta_setup": ("Automatic beta setup", "sync", 285), "beta_lock": ("Beta password", "check", 150), "live_convert": ("Release folders", "rocket", 150), "live_steps": ("Live steps by Claude", "activity", 285), "beta_api": ("Beta API for apps", "upload", 285)}.get(j.kind, (j.kind, "activity", 245)) %}
+          <details class="row job-row">
+            <summary><span class="row-lead"><span class="row-ic" style="--h:{{ jl[2] }}">{{ icon(jl[1]) }}</span>
+              <span class="row-main"><span class="row-title">{{ jl[0] }}</span><span class="row-sub">{{ j.note }} · {{ j.by_user.name if j.by_user else "System" }} · {{ j.created_at|stamp }}</span></span></span>
+              <span class="row-side">{% if j.state == "done" %}<span class="pill pill-ok">Done</span>{% elif j.state == "failed" %}<span class="pill pill-bad">Failed</span>{% else %}<span class="pill pill-accent">Running</span>{% endif %}</span></summary>
+            {% if j.output %}<pre class="job-out mono">{{ j.output }}</pre>{% else %}<p class="hint">No server output.</p>{% endif %}
+          </details>
+        {% endfor %}
+      </div>
+      <h3 class="sub-head">Deployments</h3>
+    {% endif %}
+    <div class="rows">
+      {% for d in deploys %}{% set ic = ("undo", 24) if d.rolled_back else (("rocket", 150) if d.environment.kind == "live" else ("upload", 215)) %}
+        <div class="row"><div class="row-lead"><span class="row-ic" style="--h:{{ ic[1] }}">{{ icon(ic[0]) }}</span>
+          <div class="row-main"><span class="row-title">{{ "Live" if d.environment.kind == "live" else "Beta" }} · <span class="mono">{{ d.commit }}</span></span>
+            <span class="row-sub">{{ d.note }} · {{ d.by_user.name if d.by_user else "System" }} · {{ d.created_at|stamp }}</span></div></div>
+          <div class="row-side">{% if d.rolled_back %}<span class="pill pill-warn">Rolled back</span>{% elif live_now and d.id == live_now.id %}<span class="pill pill-ok">Live now</span>{% endif %}</div></div>
+      {% else %}<div class="empty">No deployments yet.</div>{% endfor %}
+    </div>
+  </section>
+
+  {# ---------- Backups ---------- #}
+  <section class="tab-panel" data-panel="backups" hidden>
+    <div class="section-head"><p class="muted">Daily database + files to cloud storage, and a snapshot before every Go Live.</p>
+      <button class="btn btn-sm btn-primary" type="button" data-soon="Back up now arrives in Step 11.">{{ icon('db') }}Back up now</button></div>
+    <div class="rows">
+      {% set ns = namespace(day="") %}
+      {% for b in backups %}
+        {% set day = (b.created_at|local).strftime("%-d %b %Y") %}
+        {% if day != ns.day %}<div class="day-head">{{ day }}</div>{% set ns.day = day %}{% endif %}
+        {% set ic = ("x", 0) if not b.ok else ({"db": ("db", 175), "files": ("upload", 199)}.get(b.kind, ("rocket", 265))) %}
+        <div class="row{% if not b.ok %} row-fail{% endif %}"><div class="row-lead"><span class="row-ic" style="--h:{{ ic[1] }}">{{ icon(ic[0]) }}</span>
+          <div class="row-main"><span class="row-title">{{ {"db": "Database backup", "files": "Uploaded files", "snapshot": "Snapshot before Go Live"}[b.kind] }}</span>
+            <span class="row-sub">{% if b.ok %}{{ b.size_bytes|size }} · {% endif %}{{ b.created_at|stamp }} · {{ "Cloud storage" if b.ok else b.error }}</span></div></div>
+          <div class="row-side">{% if b.ok %}<span class="pill pill-ok">Saved</span>{% if b.kind != "files" %}<button class="btn btn-sm" type="button" data-soon="Restore arrives in Step 11.">Restore</button>{% endif %}{% else %}<span class="pill pill-bad">Failed</span>{% endif %}</div></div>
+      {% else %}<div class="empty">No backups yet.</div>{% endfor %}
+    </div>
+  </section>
+
+  {# ---------- Settings (F13) ---------- #}
+  <section class="tab-panel" data-panel="settings" hidden>
+    {% if owner %}
+    <form class="panel-box" method="post" action="{{ url_for('projects.save_details', project_id=p.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <h2><span class="h-ic" style="--h:{{ hue(p) }}">{{ icon('activity') }}</span>Project details</h2>
+      <div class="form-row two">
+        <div class="field"><label for="d-name">Project name</label><input id="d-name" name="name" value="{{ p.name }}" required></div>
+        <div class="field"><label for="d-client">Client</label><input id="d-client" name="client" value="{{ '' if p.client_name == 'Not set yet' else p.client_name }}" required></div>
+      </div>
+      <div class="form-row two">
+        <div class="field"><label for="d-live">Live address</label><input id="d-live" name="live_url" value="{{ live.url if live else '' }}" placeholder="https://client-site.com" required></div>
+        <div class="field"><label for="d-beta">Beta (test site) address <span class="hint">(leave empty — Claude makes it)</span></label><input id="d-beta" name="beta_url" value="{{ beta.url if beta else '' }}" placeholder="{{ beta_names.host }}"></div>
+      </div>
+      <div class="form-row two">
+        <div class="field"><label for="d-host">Hosting</label><select id="d-host" name="host_type">
+          <option value="vps"{% if p.host_type == "vps" %} selected{% endif %}>VPS</option>
+          <option value="cpanel"{% if p.host_type == "cpanel" %} selected{% endif %}>cPanel</option></select></div>
+        <div class="field"><label for="d-server">Server</label><input id="d-server" name="server" value="{{ (live.server_host or '') if live else '' }}" placeholder="vps-1.company.com"></div>
+      </div>
+      <div class="form-row two">
+        <div class="field"><label for="d-repo">GitHub repo</label><input id="d-repo" name="repo" class="mono" value="{{ p.github_repo or '' }}" placeholder="owner/repo"></div>
+        <div class="field"><label for="d-tech">Tech (comma separated)</label><input id="d-tech" name="tech" value="{{ p.tech_stack|join(', ') }}" placeholder="Laravel, Flutter"></div>
+      </div>
+      <div class="field"><label for="d-tests">Test command</label><input id="d-tests" name="test_command" class="mono" value="{{ p.test_command }}" placeholder="php artisan test   ·   pytest -q   ·   flutter test">
+        <span class="hint">How Claude runs this project's automated tests (from the repo's top folder). Leave empty if the project has no tests yet.</span></div>
+      <label class="check"><input type="checkbox" name="active" value="1"{% if p.is_active %} checked{% endif %}> <span>Active project (untick for a dormant one)</span></label>
+      <label class="check"><input type="checkbox" name="watch" value="1"{% if p.monitor_enabled %} checked{% endif %}> <span>Watch this site — check the live address every 5 minutes and alert on Telegram if it goes down or the home page changes</span></label>
+      <div><button class="btn btn-primary" type="submit">Save details</button></div>
+    </form>
+    <section class="panel-box" id="auto-beta">
+      <h2><span class="h-ic" style="--h:285">{{ icon('sync') }}</span>Automatic beta</h2>
+      {% if beta and beta.managed %}
+        <p>This project's beta is made and run by the dashboard: <a href="{{ beta.url }}" target="_blank" rel="noopener" class="mono">{{ beta.url.replace("https://", "") }}</a>{% if beta.db_name %} · database <span class="mono">{{ beta.db_name }}</span> (a copy of live){% endif %}.</p>
+        {% if p.beta_recipe %}<details><summary class="hint">Steps Claude found to run this app (replayed on every beta deploy)</summary><pre class="job-out mono">{{ p.beta_recipe }}</pre></details>{% endif %}
+      {% else %}
+        <p class="hint">The dashboard can make this project's beta by itself at <span class="mono">{{ beta_names.host }}</span>: website, a copy of the live database, the code, and Claude sets the app up — any tech. Live is only read. It also starts by itself after the first change when no beta exists.</p>
+      {% endif %}
+      {% if beta and beta.server_id and beta.url.endswith(".beta.ivinfotech.com") %}
+        <form method="post" action="{{ url_for('projects.start_job', project_id=p.id, kind='beta_lock') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          {% if beta_login %}<input type="hidden" name="new_password" value="1">{% endif %}
+          <button class="btn btn-sm" {% if busy %}type="button" data-soon="{{ busy }}"{% else %}type="submit"{% endif %}>{{ "New beta password" if beta_login else "Lock the beta with a password" }}</button>
+        </form>
+      {% endif %}
+      {% if can_make_beta %}
+        <form method="post" action="{{ url_for('projects.start_job', project_id=p.id, kind='beta_setup') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn {{ '' if beta and beta.managed else 'btn-primary' }}" {% if busy %}type="button" data-soon="{{ busy }}"{% else %}type="submit"{% endif %}>{{ icon('sync') }}{{ "Rebuild beta automatically" if beta and beta.managed else "Create beta automatically" }}</button>
+        </form>
+      {% else %}<p class="hint">First set the <strong>live</strong> server and folder (and its database) in “Servers &amp; deploy” below — the beta is made as a copy of live.</p>{% endif %}
+    </section>
+    {% if live and live.server_id and live.deploy_path %}
+    <section class="panel-box" id="live-releases">
+      <h2><span class="h-ic" style="--h:150">{{ icon('rocket') }}</span>Safe Go Live (release folders)</h2>
+      {% if live.layout == "releases" %}
+        <p>Live uses release folders · current <span class="mono">{{ live.current_release }}</span>{% if live.shared %} · kept across releases: <span class="mono">{{ live.shared|join(", ") }}</span>{% endif %}{% if live.restart_units %} · services restarted after a switch: <span class="mono">{{ live.restart_units|join(", ") }}</span>{% endif %}.</p>
+        <p class="hint">A Go Live builds the next release beside the running one, switches in an instant, restarts only this site, and switches straight back if the site doesn't answer.</p>
+        <form method="post" action="{{ url_for('projects.save_live_steps', project_id=p.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="field"><label for="live-steps">Steps for a new live release <span class="hint">(run inside the new release before the switch; one command per line; <span class="mono">@publish web/dist</span> = built files → the web root)</span></label>
+            <textarea id="live-steps" name="live_recipe" class="mono" rows="5" placeholder="{{ p.beta_recipe or 'composer install --no-dev --no-interaction' }}">{{ p.live_recipe }}</textarea>
+            <span class="hint">{% if p.live_recipe %}Used for every Go Live.{% else %}Empty — the beta's steps are used (shown greyed).{% endif %} Never database-wiping commands here.</span></div>
+          <button class="btn" type="submit">Save live steps</button>
+        </form>
+        <form method="post" action="{{ url_for('projects.start_job', project_id=p.id, kind='live_steps') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn" type="submit" {% if busy %}disabled title="{{ busy }}"{% endif %}>{{ icon('activity') }}{{ "Let Claude rewrite the live steps" if p.live_recipe else "Let Claude write the live steps" }}</button>
+          <span class="hint">Claude only reads the live site; the next Go Live tries the steps in a new release before switching. Written by itself after a switch to release folders and before a first Go Live.</span>
+        </form>
+      {% else %}
+        <p class="hint">Today a Go Live updates the live folder in place. Switching to <strong>release folders</strong> (done once, with a backup, without taking the site down) makes every Go Live build the new version beside the running one, switch in an instant, and switch back by itself if the site doesn't answer. Settings files, uploads and database files stay shared.</p>
+        <button class="btn" type="button" {% if busy %}data-soon="{{ busy }}"{% else %}data-open="dlg-convert"{% endif %}>{{ icon('rocket') }}Switch live to release folders…</button>
+        <dialog class="dlg" id="dlg-convert">
+          <form method="post" action="{{ url_for('projects.live_convert', project_id=p.id) }}" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="dlg-head"><h2>Release folders for {{ live.url.replace("https://", "") }}</h2><button type="button" class="icon-btn" data-close aria-label="Close">{{ icon('x') }}</button></div>
+            <div class="dlg-body">
+              <ol class="summary-list"><li>A full backup of the live folder.</li><li>The folder becomes <span class="mono">releases/r…</span> + a link; settings, uploads and database files move to <span class="mono">shared/</span> (found by comparing with the files on GitHub). A web root of its own (e.g. a React build) moves into the release too.</li><li>Only this site's PHP workers / services restart. A SQLite database moves only while its service is paused for those few seconds — it is never copied.</li><li>The site and every service are checked right away; anything wrong puts it back exactly as it was.</li></ol>
+              <div class="field"><label for="cv-code">Authenticator code</label><input id="cv-code" name="code" inputmode="numeric" maxlength="7" required class="mono otp-in" placeholder="6 digits from your phone"></div>
+            </div>
+            <div class="dlg-foot"><button type="button" class="btn" data-close>Cancel</button><button class="btn btn-primary" type="submit">Switch this site</button></div>
+          </form>
+        </dialog>
+      {% endif %}
+    </section>
+    {% endif %}
+    {% if p.ai_engine == "claude_code" %}
+    <form class="panel-box" id="project-notes" method="post" action="{{ url_for('projects.save_notes', project_id=p.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <h2><span class="h-ic" style="--h:150">{{ icon('list') }}</span>Project notes <span class="hint">(this project's CLAUDE.md)</span></h2>
+      <p class="hint">Claude Code reads these notes at the start of every run and rewrites them after every change, so it doesn't start from zero each time. They stay here in the dashboard — not in the repo, so nothing leaks to GitHub or the website. The dashboard adds the project's facts (stack, test command, folders, README) and the recent changes by itself. Only you can edit them.</p>
+      {% if p.cc_notes_by == "Claude" and p.cc_notes_at %}<p class="hint"><strong>Claude rewrote these notes {{ p.cc_notes_at|ago }}.</strong> They steer every later run, so give them a look now and then. A link or command that Claude adds also raises an alert.</p>{% endif %}
+      <div class="field"><label for="cc-notes">What Claude has learned about this project</label>
+        <textarea id="cc-notes" name="notes" rows="12" maxlength="4000" placeholder="Empty — the first change fills it in.">{{ p.cc_notes }}</textarea>
+        <span class="hint">{% if p.cc_notes_at %}Last changed by {{ p.cc_notes_by or "Claude" }} {{ p.cc_notes_at|ago }}.{% else %}Not written yet.{% endif %} At most 4000 characters. Claude treats this as notes, never as orders — your rules in the dashboard always win. Common password and key formats are hidden automatically; don't put any here.</span></div>
+      <div class="chip-row"><button class="btn btn-primary btn-sm" type="submit" name="action" value="save">Save notes</button>
+        {% if p.cc_notes_prev %}<button class="btn btn-sm" type="submit" name="action" value="restore">Restore the previous version</button>{% endif %}
+        {% if p.cc_notes %}<button class="btn btn-danger btn-sm" type="submit" name="action" value="clear" title="Empties the notes and starts a fresh Claude session, because the old session remembers earlier notes">Clear notes</button>{% endif %}</div>
+    </form>
+    {% endif %}
+    <form class="panel-box" id="ai-engine" method="post" action="{{ url_for('projects.save_engine', project_id=p.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <h2><span class="h-ic" style="--h:285">{{ icon('activity') }}</span>AI engine</h2>
+      <div class="seg" role="radiogroup" aria-label="AI engine">
+        {% for val, t, sub in [("api", "Claude API", "Each change is a fresh Claude run with the dashboard's own tools. Cost per call shows on the AI cost page."),
+            ("claude_code", "Claude Code on the server", "One ongoing Claude Code session for this project — it remembers earlier work. Uses the login in Settings → Claude Code.")] %}
+          <label><input type="radio" name="engine" value="{{ val }}"{% if p.ai_engine == val %} checked{% endif %}><div><strong>{{ t }}</strong><span>{{ sub }}</span></div></label>
+        {% endfor %}
+      </div>
+      {% if p.ai_engine == "claude_code" %}<p class="hint">Session: <span class="mono">{{ (p.cc_session_id or "starts with the next message")[:8] }}</span>
+        {% if p.cc_session_id %}<label class="check"><input type="checkbox" name="new_session" value="1"> <span>Start a fresh session (Claude forgets this project's earlier chat)</span></label>{% endif %}</p>{% endif %}
+      <div><button class="btn btn-primary" type="submit">Save engine</button></div>
+    </form>
+    {% if beta and live %}
+    <form class="panel-box" id="deploy-settings" method="post" action="{{ url_for('projects.save_deploy', project_id=p.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <h2><span class="h-ic" style="--h:215">{{ icon('upload') }}</span>Servers &amp; deploy</h2>
+      {% if not servers %}<p class="hint">No server added yet — add one in <a href="{{ url_for('settings.index') }}#servers">Settings → Servers</a> first.</p>{% endif %}
+      {% for e, label in [(beta, "Beta (test site)"), (live, "Live")] %}
+        <p><strong>{{ label }}</strong></p>
+        <div class="form-row two">
+          <div class="field"><label for="{{ e.kind }}-srv">Server</label><select id="{{ e.kind }}-srv" name="{{ e.kind }}_server">
+            <option value="">— not set —</option>
+            {% for s in servers %}<option value="{{ s.id }}"{% if e.server_id == s.id %} selected{% endif %}>{{ s.name }} · {{ s.host }}</option>{% endfor %}</select></div>
+          <div class="field"><label for="{{ e.kind }}-path">Project folder on the server</label><input id="{{ e.kind }}-path" name="{{ e.kind }}_path" class="mono" value="{{ e.deploy_path or '' }}" placeholder="/home/{{ 'beta' if e.kind == 'beta' else 'site' }}/public_html"></div>
+        </div>
+        <div class="field"><label for="{{ e.kind }}-db">Database name</label><input id="{{ e.kind }}-db" name="{{ e.kind }}_db" class="mono" value="{{ e.db_name or '' }}" placeholder="{{ 'site_beta' if e.kind == 'beta' else 'site_live' }}"></div>
+      {% endfor %}
+      <div class="field"><label for="db-engine">Database type</label><select id="db-engine" name="db_engine">
+        <option value="mysql"{% if p.db_engine not in ("postgres", "sqlite") %} selected{% endif %}>MySQL / MariaDB</option>
+        <option value="postgres"{% if p.db_engine == "postgres" %} selected{% endif %}>PostgreSQL</option>
+        <option value="sqlite"{% if p.db_engine == "sqlite" %} selected{% endif %}>SQLite (a file — database name sqlite:path/in/the/folder.db)</option></select>
+        <span class="hint">Live → Beta sync reads live with a dump and loads it into the beta database. The database password stays on the servers (<span class="mono">~/.my.cnf</span> / <span class="mono">~/.pgpass</span> of the SSH user) — never in the dashboard.</span></div>
+      <div class="field"><label for="deploy-script">Deploy steps <span class="hint">(run on the server inside the project folder; <span class="mono">{branch}</span> = beta or main)</span></label>
+        <textarea id="deploy-script" name="deploy_script" class="mono" rows="9">{{ p.deploy_script or deploy_template }}</textarea>
+        <span class="hint">Pre-filled for {{ p.tech_stack|join(", ") or "a plain site" }}. Change it if this project needs something else. Stops at the first step that fails.</span></div>
+      <p><strong>Beta safety lines</strong> <span class="hint">— written into beta's <span class="mono">.env</span> on every beta deploy and after every sync, so beta never messages real users or takes real money. One <span class="mono">KEY=value</span> per line.</span></p>
+      <div class="form-row two">
+        <div class="field"><label for="env-off">When messages are Off</label><textarea id="env-off" name="beta_env_off" class="mono" rows="4" placeholder="{{ env_off_example or 'SMS_ENABLED=false' }}">{{ p.beta_env_off }}</textarea></div>
+        <div class="field"><label for="env-test">When messages go to test numbers only</label><textarea id="env-test" name="beta_env_test" class="mono" rows="4" placeholder="SMS_TEST_MODE=true&#10;SMS_TEST_NUMBERS=…">{{ p.beta_env_test }}</textarea></div>
+      </div>
+      <div class="field"><label for="env-pay">When payments are sandbox</label><textarea id="env-pay" name="beta_env_sandbox" class="mono" rows="3" placeholder="RAZORPAY_KEY=rzp_test_…&#10;STRIPE_KEY=sk_test_…">{{ p.beta_env_sandbox }}</textarea>
+        <span class="hint">Use test keys only here — a live key on beta moves real money.</span></div>
+      <div><button class="btn btn-primary" type="submit">Save servers &amp; deploy</button></div>
+    </form>
+    {% endif %}
+    {% endif %}
+    {% if beta %}
+    <form class="set-grid" method="post" action="{{ url_for('projects.save_settings', project_id=p.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <section class="panel-box"><h2><span class="h-ic" style="--h:199">{{ icon('send') }}</span>Messages from beta</h2>
+        <div class="seg" role="radiogroup" aria-label="Messages from beta">
+          {% for val, t, sub, locked in [("off", "Off", "No SMS, WhatsApp, email or push leaves beta. Default.", False),
+              ("test", "Test numbers only", "Every message goes only to the numbers below, never to real users.", False),
+              ("on", "On — real users", "Beta has real live data. Real customers will get these messages." if owner else "Only the owner can turn this on.", not owner)] %}
+            <label><input type="radio" name="msg" value="{{ val }}"{% if beta.message_mode == val %} checked{% endif %}{% if locked %} disabled{% endif %}><div><strong>{{ t }}</strong><span>{{ sub }}</span></div></label>
+          {% endfor %}
+        </div>
+        <div class="field" id="tn-box"{% if beta.message_mode != "test" %} hidden{% endif %}><label for="tn">Test numbers / emails (one per line)</label><textarea id="tn" name="test_numbers">{{ beta.test_numbers }}</textarea></div>
+      </section>
+      <section class="panel-box"><h2><span class="h-ic" style="--h:160">{{ icon('db') }}</span>Payments on beta</h2>
+        <div class="seg" role="radiogroup" aria-label="Payments on beta">
+          {% for val, t, sub, locked in [("sandbox", "Sandbox / test keys", "No real money ever moves on beta. Default.", False),
+              ("live", "Live keys", "Real money. Use only for a short, planned check." if owner else "Only the owner can turn this on.", not owner)] %}
+            <label><input type="radio" name="pay" value="{{ val }}"{% if beta.payment_mode == val %} checked{% endif %}{% if locked %} disabled{% endif %}><div><strong>{{ t }}</strong><span>{{ sub }}</span></div></label>
+          {% endfor %}
+        </div>
+      </section>
+      <section class="panel-box"><h2><span class="h-ic" style="--h:{{ hue(p) }}">{{ icon('github') }}</span>Project</h2>
+        <dl class="kv">
+          <dt>GitHub</dt><dd class="mono">{{ p.github_repo or "—" }}</dd>
+          <dt>Hosting</dt><dd>{{ "VPS" if p.host_type == "vps" else "cPanel" }} · <span class="mono">{{ live.server_host if live else "—" }}</span></dd>
+          <dt>Beta</dt><dd class="mono">{{ beta.url }} · branch {{ beta.branch }}</dd>
+          <dt>Live</dt><dd class="mono">{{ live.url if live else "—" }} · branch {{ live.branch if live else "main" }}</dd>
+          <dt>Developers</dt><dd>{% for u in devs %}{{ u.name }}{% if not u.is_active %} (off){% endif %}{% if not loop.last %}, {% endif %}{% else %}None{% endfor %}</dd>
+        </dl>
+      </section>
+      <div><button class="btn btn-primary" type="submit">Save settings</button></div>
+    </form>
+    {% endif %}
+  </section>
+{% endblock %}

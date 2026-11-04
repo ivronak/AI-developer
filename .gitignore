@@ -1,3 +1,7 @@
 .DS_Store
 *.log
 .env
+dashboard/venv/
+dashboard/instance/
+__pycache__/
+*.pyc

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <title>{% block title %}{{ title }}{% endblock %} · {{ APP_NAME }}</title>
+  <script>try { var t = localStorage.getItem("apd.theme"); if (t) document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/ui.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+  {% block head %}{% endblock %}
+  <script src="{{ url_for('static', filename='js/ui.js') }}" defer></script>
+  {% block scripts %}{% endblock %}
+</head>
+<body>
+{% set owner = current_user.is_owner %}
+{% set sections = {"projects": ("All Projects", "main.projects"), "backups": ("Backups", "main.backups"), "users": ("Users & log", "users.index"), "account": ("My account", "auth.account"), "settings": ("Settings", "settings.index")} %}
+{% set sec = sections.get(page, sections["projects"]) %}
+  <header class="topbar">
+    <div class="topbar-in">
+      <a class="brand" href="{{ url_for('main.projects') }}" aria-label="{{ APP_NAME }} — home">
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 7h14M5 12h10M5 17h6"/></svg></span>
+      </a>
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="{{ url_for(sec[1]) }}">{{ sec[0] }}</a>
+        {% if crumb and crumb != sec[0] %}<span class="sep">/</span><strong>{{ crumb }}</strong>{% endif %}
+      </nav>
+      <nav class="inavs" aria-label="Main">
+        {% for n in NAV if owner or not n.owner_only %}
+          <a href="{{ url_for(n.endpoint) }}" class="inav{% if page == n.key %} is-on{% endif %}"{% if page == n.key %} aria-current="page"{% endif %}
+             aria-label="{{ n.label }}" data-tip="{{ n.label }}">{{ icon(n.icon) }}<span class="inav-l">{{ n.label }}</span></a>
+        {% endfor %}
+      </nav>
+      <div class="top-actions">
+        <button class="icon-btn find-btn" type="button" id="find-btn" aria-label="Find (F)" data-tip="Find · F">{{ icon('search') }}</button>
+        <button class="icon-btn" type="button" id="bell" aria-label="Alerts" aria-expanded="false" aria-controls="alerts-panel" data-tip="Alerts">{{ icon('bell') }}{% if unseen_alerts %}<span class="badge">{{ unseen_alerts }}</span>{% endif %}</button>
+        <button class="icon-btn" type="button" data-theme-toggle aria-label="Switch light / dark theme" data-tip="Theme"></button>
+        <a class="me" href="{{ url_for('auth.account') }}" title="My account">
+          <span class="avatar">{{ current_user.initials }}</span>
+          <span class="me-txt"><strong>{{ current_user.name }}</strong><span>{{ "Owner" if owner else "Developer" }}</span></span>
+        </a>
+        <form method="post" action="{{ url_for('auth.logout') }}" class="inline-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="icon-btn" type="submit" aria-label="Sign out" data-tip="Sign out">{{ icon('logout') }}</button>
+        </form>
+      </div>
+    </div>
+  </header>
+
+  <section class="alerts-panel" id="alerts-panel" hidden aria-label="Alerts">
+    <div class="alerts-head"><strong>Alerts</strong>
+      {% if unseen_alerts %}
+      <form method="post" action="{{ url_for('main.alerts_seen') }}" class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="link-btn" type="submit">Mark all seen</button>
+      </form>
+      {% endif %}
+    </div>
+    <ul class="alerts-list">
+      {% for a in top_alerts %}
+        <li class="{% if not a.seen_at %}unseen{% endif %}"><span class="dot"></span><span>{{ a.message }}<time>{{ a.created_at|ago }}</time></span></li>
+      {% else %}
+        <li><span></span><span class="muted">No alerts.</span></li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <main class="page" id="main">
+    {% block content %}{% endblock %}
+  </main>
+
+  <nav class="tabbar" aria-label="Main">
+    {% for n in NAV if owner or not n.owner_only %}
+      {% if loop.index == 2 %}<button type="button" id="tab-alerts">{{ icon('bell') }}<span>Alerts</span>{% if unseen_alerts %}<span class="badge">{{ unseen_alerts }}</span>{% endif %}</button>{% endif %}
+      <a href="{{ url_for(n.endpoint) }}"{% if page == n.key %} class="is-on" aria-current="page"{% endif %}>{{ icon(n.icon) }}<span>{{ n.short }}</span></a>
+    {% endfor %}
+  </nav>
+
+  <div class="toasts" id="toasts" aria-live="polite">
+    {% for cat, msg in get_flashed_messages(with_categories=true) %}<div class="toast{% if cat == 'bad' %} toast-bad{% endif %}">{{ msg }}</div>{% endfor %}
+  </div>
+</body>
+</html>

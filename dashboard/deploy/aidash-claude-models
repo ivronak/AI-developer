@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+"""AI Project Dashboard helper: ask the VPS's Claude Code which models it offers and save ONLY the model facts
+(name, description, effort levels) to /etc/ai-dashboard/claude-models.json for the dashboard to read. The same file also
+carries a few facts about this VPS Claude for the dashboard's "Claude accounts" page: its plan, which connectors it has
+and whether the remote-control service is running (plus a masked e-mail hint such as j***@gmail.com — never the full address).
+
+Why root: the dashboard's own Claude login is an inference-only token, for which Claude Code shows just 5 aliases; the
+VPS's full login shows every model (the same list as /model). Nothing else from the login is ever written: no full e-mail,
+organisation or token. No model is called, so no usage is spent. On any failure the previous file is kept."""
+import datetime, grp, json, os, re, subprocess, sys, tempfile, time
+
+CLAUDE = "/usr/local/bin/claude"
+CREDENTIALS = "/root/.claude/.credentials.json"
+OUT = "/etc/ai-dashboard/claude-models.json"
+OUT_GROUP = "aided5498"                       # the dashboard's site user reads it (mode 0640)
+SKIP_IF_TOKEN_EXPIRES_WITHIN = 20 * 60        # seconds: let the long-running Claude refresh its own login, never us
+LEVELS = ("low", "medium", "high", "xhigh", "max")
+VALUE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
+
+def log(msg):
+    print(f"aidash-claude-models: {msg}", file=sys.stderr, flush=True)
+
+
+# "name: address - ✔ Connected" (the address may hold spaces for a local command, e.g. "npx -y x")
+MCP_LINE = re.compile(r"^(?P<name>.+?):\s+.+?\s-\s+(?P<mark>✔|✘|!)(?:\s+(?P<text>.*))?$")
+
+
+def parse_mcp(text):
+    """`claude mcp list` → [{"name": "Mobbin", "status": "connected" | "needs-auth" | "failed"}]; names only, no addresses."""
+    out = []
+    for line in text.splitlines():
+        m = MCP_LINE.match(line.strip())
+        if not m:
+            continue
+        name = re.sub(r"^claude\.ai\s+", "", m.group("name")).strip()[:60]
+        status = {"✔": "connected", "!": "needs-auth"}.get(m.group("mark"), "failed")      # from the mark, not from the text
+        if name:
+            out.append({"name": name, "status": status})
+    return out[:30]
+
+
+def mask_email(email):
+    if not isinstance(email, str) or "@" not in email:
+        return ""
+    local, _, domain = email.partition("@")
+    return ((local[:1] if len(local) > 2 else "") + "***@" + domain[:50])[:60]
+
+
+def vps_claude(account, env, cwd):
+    """Facts about this VPS Claude for the dashboard page. Never raises: a missing piece is just left out."""
+    info = {"plan": "", "account_hint": "", "connectors": None, "remote_control": "unknown"}
+    try:
+        if isinstance(account, dict):
+            info["plan"] = str(account.get("subscriptionType") or "")[:30]
+            info["account_hint"] = mask_email(account.get("email"))
+        r = subprocess.run([CLAUDE, "mcp", "list"], capture_output=True, text=True, timeout=30, cwd=cwd, env=env, stdin=subprocess.DEVNULL)
+        parsed = parse_mcp(r.stdout)
+        info["connectors"] = parsed if parsed or "No MCP servers" in r.stdout else None
+    except Exception as e:                       # optional facts: whatever goes wrong here must never cost the model list
+        log(f"VPS Claude connectors not read ({e.__class__.__name__})")
+    try:
+        loaded = subprocess.run(["systemctl", "show", "-p", "LoadState", "--value", "claude-web.service"], capture_output=True, text=True, timeout=10)
+        if loaded.stdout.strip() == "loaded":
+            r = subprocess.run(["systemctl", "is-active", "claude-web.service"], capture_output=True, text=True, timeout=10)
+            state = r.stdout.strip()
+            info["remote_control"] = "active" if state == "active" else ("inactive" if state in ("inactive", "failed") else "unknown")
+    except Exception as e:
+        log(f"claude-web service state not read ({e.__class__.__name__})")
+    return info
+
+
+def clean(m):
+    """Keep only whitelisted facts about one model, or None when it does not look like a model entry."""
+    if not isinstance(m, dict) or not isinstance(m.get("value"), str) or not VALUE_RE.match(m["value"]):
+        return None
+    name = m.get("displayName")
+    if not isinstance(name, str) or not name.strip():
+        return None
+    resolved = m.get("resolvedModel")
+    levels = m.get("supportedEffortLevels")
+    return {
+        "value": m["value"],
+        "resolvedModel": resolved if isinstance(resolved, str) and VALUE_RE.match(resolved) else m["value"],
+        "displayName": name.strip()[:80],
+        "description": str(m.get("description") or "")[:200],
+        "supportsEffort": bool(m.get("supportsEffort")),
+        "supportedEffortLevels": [l for l in LEVELS if isinstance(levels, list) and l in levels],
+        "supportsAdaptiveThinking": bool(m.get("supportsAdaptiveThinking")),
+        "supportsFastMode": bool(m.get("supportsFastMode")),
+        "supportsThinkingOff": bool(m.get("supportsThinkingOff")),
+    }
+
+
+def main():
+    try:
+        with open(CREDENTIALS) as f:
+            expires = (json.load(f).get("claudeAiOauth") or {}).get("expiresAt")
+        if expires and expires / 1000 - time.time() < SKIP_IF_TOKEN_EXPIRES_WITHIN:
+            log("the VPS login is about to refresh itself — skipping this run, keeping the previous list")
+            return 0
+    except (OSError, ValueError) as e:
+        log(f"cannot read the login's expiry ({e.__class__.__name__}) — continuing")
+
+    req = json.dumps({"type": "control_request", "request_id": "models", "request": {"subtype": "initialize"}}) + "\n"
+    env = dict(os.environ, HOME="/root", DISABLE_AUTOUPDATER="1")
+    with tempfile.TemporaryDirectory() as cwd:
+        try:
+            r = subprocess.run([CLAUDE, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
+                                "--no-session-persistence"], input=req, capture_output=True, text=True, timeout=60, cwd=cwd, env=env)
+        except subprocess.TimeoutExpired:
+            log("Claude Code did not answer in 60 seconds — keeping the previous list")
+            return 1
+    inner = None
+    for line in r.stdout.splitlines():
+        if line.startswith("{"):
+            try:
+                ev = json.loads(line)
+            except ValueError:
+                continue
+            if ev.get("type") == "control_response" and (ev.get("response") or {}).get("subtype") == "success":
+                inner = ev["response"].get("response") or {}
+    models = [c for c in (clean(m) for m in (inner or {}).get("models") or []) if c]
+    if not models:
+        log(f"no model list in Claude Code's answer (exit {r.returncode}) — keeping the previous list")
+        return 1
+
+    version = str((inner or {}).get("claude_code_version") or "")[:40]
+    with tempfile.TemporaryDirectory() as cwd:
+        vps = vps_claude((inner or {}).get("account"), env, cwd)
+    doc = {"fetched_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+           "claude_code_version": version, "source": "VPS Claude Code login", "models": models, "vps_claude": vps}
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(OUT), prefix=".claude-models-")
+    with os.fdopen(fd, "w") as f:
+        json.dump(doc, f, ensure_ascii=False, indent=1)
+    os.chmod(tmp, 0o640)
+    os.chown(tmp, 0, grp.getgrnam(OUT_GROUP).gr_gid)
+    os.replace(tmp, OUT)
+    log(f"wrote {len(models)} models")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

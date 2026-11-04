@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Sign in · {{ APP_NAME }}</title>
+  <script>try { var t = localStorage.getItem("apd.theme"); if (t) document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/ui.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+  <script src="{{ url_for('static', filename='js/ui.js') }}" defer></script>
+</head>
+<body>
+  <div class="theme-corner">
+    <button class="icon-btn" type="button" data-theme-toggle aria-label="Switch light / dark theme"></button>
+  </div>
+
+  <main class="login-page">
+    <div class="login-wrap">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 7h14M5 12h10M5 17h6"/></svg>
+        </div>
+        <div>
+          <div class="brand-name">{{ APP_NAME }}</div>
+          <div class="brand-tag">beta → approval → live</div>
+        </div>
+      </div>
+
+      <section class="login-card" aria-live="polite">
+        <div class="steps" aria-hidden="true"><span class="on"></span><span class="{% if step in ('code', 'setup') %}on{% endif %}"></span></div>
+
+        {% for cat, msg in get_flashed_messages(with_categories=true) %}
+          <div class="msg {% if cat == 'bad' %}msg-bad{% else %}msg-ok{% endif %}">{{ msg }}</div>
+        {% endfor %}
+
+        {% if step == "password" %}
+        <form method="post" action="{{ url_for('auth.login', next=request.args.get('next')) }}" novalidate>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="login-head">
+            <h1>Sign in</h1>
+            <p class="muted">Use your own account. Accounts are never shared.</p>
+          </div>
+          {% if error %}<div class="msg msg-bad">{{ error }}</div>{% endif %}
+          <div class="field">
+            <label for="login-id">Email or mobile</label>
+            <input id="login-id" name="login" type="text" autocomplete="username" placeholder="you@company.com" value="{{ login or '' }}" required autofocus>
+          </div>
+          <div class="field">
+            <label for="login-pw">Password</label>
+            <div class="pw-wrap">
+              <input id="login-pw" name="password" type="password" autocomplete="current-password" required>
+              <button class="icon-btn" type="button" data-show-pw="login-pw" aria-label="Show password">{{ icon('eye') }}</button>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-block" type="submit">Continue</button>
+        </form>
+
+        {% elif step == "code" %}
+        <form method="post" action="{{ url_for('auth.login_code', next=request.args.get('next')) }}" novalidate>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="use" value="{{ 'recovery' if recovery else 'app' }}" id="code-kind">
+          <div class="login-head">
+            <h1>Enter the code</h1>
+            <p class="muted" id="code-help">{% if recovery %}Type one of your recovery codes (looks like <span class="mono">a1b2-c3d4</span>). Each works once.{% else %}Open your authenticator app and type the 6-digit code for <strong>{{ APP_NAME }}</strong>.{% endif %}</p>
+          </div>
+          {% if error %}<div class="msg msg-bad">{{ error }}</div>{% endif %}
+          <div class="field">
+            <label for="code">{{ "Recovery code" if recovery else "Authenticator code" }}</label>
+            <input id="code" class="{{ '' if recovery else 'otp-input' }}" name="code" type="text" {% if not recovery %}inputmode="numeric" maxlength="6" pattern="[0-9]{6}"{% endif %} autocomplete="one-time-code" required autofocus>
+          </div>
+          <button class="btn btn-primary btn-block" type="submit">Verify and sign in</button>
+          <div class="otp-meta">
+            <a class="link-btn" href="{{ url_for('auth.login') }}">← Use another account</a>
+            {% if recovery %}
+              <a class="link-btn" href="{{ url_for('auth.login_code') }}">Use the app code</a>
+            {% else %}
+              <button class="link-btn" type="button" data-recovery>Lost your phone?</button>
+            {% endif %}
+          </div>
+        </form>
+
+        {% elif step == "setup" %}
+        <form method="post" action="{{ url_for('auth.login_setup', next=request.args.get('next')) }}" novalidate class="setup-2fa">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="login-head">
+            <h1>Set up the authenticator</h1>
+            <p class="muted">Every sign-in needs a code from an authenticator app (Google Authenticator, Microsoft Authenticator…). One-time setup:</p>
+          </div>
+          <ol class="summary-list">
+            <li>Open the app and tap <strong>+</strong> → <strong>Scan a QR code</strong>.</li>
+            <li>Scan this code. It adds “{{ APP_NAME }}”.</li>
+            <li>Type the 6-digit code the app shows.</li>
+          </ol>
+          <div class="qr">{{ qr }}</div>
+          <div>
+            <p class="hint">Can't scan? Type this key in the app instead:</p>
+            <div class="secret">{{ secret }}</div>
+          </div>
+          {% if error %}<div class="msg msg-bad">{{ error }}</div>{% endif %}
+          <div class="field">
+            <label for="code">Code from the app</label>
+            <input id="code" class="otp-input" name="code" type="text" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" autocomplete="one-time-code" required>
+          </div>
+          <button class="btn btn-primary btn-block" type="submit">Turn on and sign in</button>
+          <div class="otp-meta"><a class="link-btn" href="{{ url_for('auth.login') }}">← Use another account</a></div>
+        </form>
+
+        {% elif step == "locked" %}
+        <div class="login-head">
+          <h1>Sign-in locked</h1>
+          <p class="muted">Too many wrong attempts. Try again in about <strong class="mono">{{ minutes }} min</strong>. The owner has been alerted.</p>
+        </div>
+        <a class="btn btn-block" href="{{ url_for('auth.login') }}">Back to sign in</a>
+        {% endif %}
+      </section>
+    </div>
+  </main>
+  <script>
+    document.addEventListener("click", function (e) {
+      var b = e.target.closest("[data-show-pw]");
+      if (b) { var i = document.getElementById(b.getAttribute("data-show-pw")); i.type = i.type === "password" ? "text" : "password"; }
+      var r = e.target.closest("[data-recovery]");
+      if (r) {
+        document.getElementById("code-kind").value = "recovery";
+        var c = document.getElementById("code");
+        c.removeAttribute("maxlength"); c.removeAttribute("pattern"); c.removeAttribute("inputmode"); c.className = ""; c.value = ""; c.focus();
+        document.querySelector('label[for="code"]').textContent = "Recovery code";
+        document.getElementById("code-help").innerHTML = 'Type one of your recovery codes (looks like <span class="mono">a1b2-c3d4</span>). Each works once.';
+        r.remove();
+      }
+    });
+    var otp = document.querySelector(".otp-input");
+    if (otp) otp.addEventListener("input", function () { this.value = this.value.replace(/\D/g, "").slice(0, 6); });
+  </script>
+</body>
+</html>

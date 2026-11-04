@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="page-head">
+    <h1>{{ title }}</h1>
+    <p>{{ lead }}</p>
+  </div>
+  <section class="hero" style="--h:245">
+    <span class="pav">{{ icon('activity') }}</span>
+    <div class="hero-id">
+      <h1>Being built</h1>
+      <div class="hero-sub"><span>{{ next_step }}</span></div>
+    </div>
+  </section>
+{% endblock %}

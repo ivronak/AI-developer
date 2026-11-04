@@ -1,0 +1,781 @@
+#!/usr/bin/env python3
+"""AI Project Dashboard: run ONE root command, only after the owner types a fresh authenticator code for exactly that command.
+
+Why a separate root daemon: the dashboard (a web app) and Claude (which reads untrusted client code) must never hold root. This daemon
+is the only thing that can run a command as root, and it only does so for a ticket that it hands out itself:
+
+  1. The dashboard shows the owner the exact command in a card. The owner types the 6-digit code of the authenticator app that was
+     enrolled ON THE SERVER (`aidash-rootd enroll`); the secret exists only in /etc/aidash-rootd/totp.json (root, 0600) and on the
+     owner's phone — it is NOT in the dashboard's database.
+  2. The dashboard sends {op: authorize, code, cmd_sha}; the daemon checks the code (RFC 6238, 30 s steps, one step of drift, each
+     step usable once, also across restarts) and answers with a random one-time ticket bound to that command's SHA-256, valid for 2 minutes.
+     Wrong codes lock it: 5 in 10 minutes or 10 in 24 hours -> locked 15 min, then 1 h, 6 h, 24 h (the counters survive a restart;
+     `aidash-rootd unlock` as root clears them).
+  3. The dashboard sends {op: exec, ticket, cmd}; the daemon runs the command only if the ticket is known, unused, unexpired, was issued
+     for the authenticator that is enrolled NOW, and the command hashes to the same value. Output is returned (the end of it); every
+     step is written to /var/log/aidash-rootd.log, and a command is NOT run if its start cannot be logged.
+
+What this protects against: a prompt-injected Claude, a developer account, or anyone without the owner's phone. What it can NOT
+protect against: someone who already controls the dashboard process AND tricks the owner into typing a code for a command shown
+to them (the card is drawn by the dashboard). Only the dashboard's user (and root) may connect to the socket (file mode + SO_PEERCRED,
+checked before a thread is started).
+
+Commands:  serve | enroll | reset | unlock | status        (all but serve are run by the owner as root in a terminal on the server)
+Switch off at any time:  systemctl disable --now aidash-rootd"""
+import base64
+import hashlib
+import hmac
+import json
+import os
+import re
+import secrets
+import signal
+import socket
+import socketserver
+import struct
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+
+SOCKET_DIR = "/run/aidash-rootd"
+SOCKET = SOCKET_DIR + "/rootd.sock"
+CONFIG_DIR = "/etc/aidash-rootd"
+TOTP_FILE = CONFIG_DIR + "/totp.json"
+STATE_FILE = "/var/lib/aidash-rootd/state.json"
+OUT_DIR = "/var/lib/aidash-rootd/out"            # where a running command's output goes (root only)
+LOG_FILE = "/var/log/aidash-rootd.log"
+ALLOWED_USERS = ("aided5498",)                  # besides root: the dashboard's own Linux user
+SOCKET_GROUP = "aided5498"
+TICKET_SECONDS = 120
+MAX_TICKETS = 5
+FAIL_LIMIT = 5                                  # wrong codes within FAIL_WINDOW ...
+FAIL_WINDOW = 10 * 60
+DAY = 24 * 3600
+DAY_LIMIT = 10                                  # ... or within 24 hours lock it
+LOCK_STEPS = (15 * 60, 60 * 60, 6 * 3600, 24 * 3600)      # each new lock is longer
+LEVEL_DECAY = 7 * DAY                           # no lock for a week: start again at 15 minutes
+ENROLL_TRIES = 5                                # confirmation-code tries while enrolling
+MAX_CMD = 2000
+MAX_TIMEOUT = 1800
+MAX_OUTPUT = 200_000
+RETURN_OUTPUT = 8000
+OUT_CAP = 64 * 1024 * 1024                      # a command that prints more than this has its output file cut (the disk is shared with 25 sites)
+KILL_GRACE = 15                                 # seconds between SIGTERM and SIGKILL when a command overruns its time
+REQUEST_LINE = 131072                           # a 2000-character command can grow to ~24 KB once JSON-escaped
+CONN_DEADLINE = 10                              # seconds for a client to send its request line in total
+RESPONSE_TIMEOUT = 20
+MAX_CONNECTIONS = 16
+NOISY = ("authorize_locked", "authorize_bad", "authorize_replay", "exec_unknown_ticket", "error", "connection_refused")      # exec_refused (a real mismatch) is never in here
+NOISY_PER_MINUTE = 20
+ENV = {"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME": "/root", "LANG": "C.UTF-8"}
+HEX64 = re.compile(r"[0-9a-f]{64}")
+
+
+# ---------------------------------------------------------------- TOTP (RFC 6238, SHA-1, 30 s, 6 digits)
+def totp(secret_b32, counter, digits=6):
+    key = base64.b32decode(secret_b32.upper().replace(" ", "") + "=" * (-len(secret_b32.replace(" ", "")) % 8))
+    mac = hmac.new(key, struct.pack(">Q", counter), hashlib.sha1).digest()
+    offset = mac[-1] & 0x0F
+    value = (struct.unpack(">I", mac[offset:offset + 4])[0] & 0x7FFFFFFF) % (10 ** digits)
+    return str(value).zfill(digits)
+
+
+def new_secret():
+    return base64.b32encode(secrets.token_bytes(20)).decode().rstrip("=")
+
+
+def cmd_sha(cmd):
+    return hashlib.sha256(cmd.encode("utf-8")).hexdigest()
+
+
+def fingerprint(secret):
+    """Ties a ticket to the authenticator that existed when it was issued (reset / re-enroll voids open tickets)."""
+    return hashlib.sha256(secret.encode("utf-8")).hexdigest()[:16]
+
+
+def matching_step(secret, code, now):
+    """The step a code belongs to (this one or one either side), or None."""
+    step = int(now // 30)
+    return next((s for s in (step - 1, step, step + 1) if hmac.compare_digest(totp(secret, s), code)), None)
+
+
+def peer_uid(sock):
+    try:
+        _, uid, _ = struct.unpack("3i", sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i")))
+        return uid
+    except (OSError, AttributeError, struct.error):
+        return -1
+
+
+# ---------------------------------------------------------------- a small QR code (version 4, error correction L, byte mode)
+# So the owner can SCAN the authenticator key instead of typing 32 letters. Checked against a reference QR library in tests/test_rootd.py.
+_QR_N = 33
+_QR_DATA_WORDS, _QR_EC_WORDS = 80, 20          # version 4-L: 100 codewords, one block
+_QR_MASKS = (lambda x, y: (x + y) % 2 == 0, lambda x, y: y % 2 == 0, lambda x, y: x % 3 == 0, lambda x, y: (x + y) % 3 == 0,
+             lambda x, y: (x // 3 + y // 2) % 2 == 0, lambda x, y: x * y % 2 + x * y % 3 == 0,
+             lambda x, y: (x * y % 2 + x * y % 3) % 2 == 0, lambda x, y: ((x + y) % 2 + x * y % 3) % 2 == 0)
+
+
+def _gf_tables():
+    exp, log, x = [0] * 512, [0] * 256, 1
+    for i in range(255):
+        exp[i], log[x] = x, i
+        x <<= 1
+        if x & 0x100:
+            x ^= 0x11D
+    for i in range(255, 512):
+        exp[i] = exp[i - 255]
+    return exp, log
+
+
+_EXP, _LOG = _gf_tables()
+
+
+def _gf_mul(a, b):
+    return 0 if a == 0 or b == 0 else _EXP[_LOG[a] + _LOG[b]]
+
+
+def _rs_remainder(data, n):
+    gen = [1]
+    for i in range(n):                          # (x - a^0)(x - a^1)...(x - a^(n-1)), highest power first
+        nxt = [0] * (len(gen) + 1)
+        for j, c in enumerate(gen):
+            nxt[j] ^= c
+            nxt[j + 1] ^= _gf_mul(c, _EXP[i])
+        gen = nxt
+    rem = [0] * n
+    for b in data:
+        factor = b ^ rem[0]
+        rem = rem[1:] + [0]
+        for i in range(n):
+            rem[i] ^= _gf_mul(gen[i + 1], factor)
+    return rem
+
+
+def _qr_codewords(data):
+    bits = "0100" + format(len(data), "08b") + "".join(format(b, "08b") for b in data)
+    if len(bits) > _QR_DATA_WORDS * 8:
+        raise ValueError("too long for this QR code")
+    bits += "0" * min(4, _QR_DATA_WORDS * 8 - len(bits))
+    bits += "0" * (-len(bits) % 8)
+    words = [int(bits[i:i + 8], 2) for i in range(0, len(bits), 8)]
+    pad = 0
+    while len(words) < _QR_DATA_WORDS:
+        words.append((0xEC, 0x11)[pad % 2])
+        pad += 1
+    return words + _rs_remainder(words, _QR_EC_WORDS)
+
+
+def _qr_penalty(g):
+    n, score = len(g), 0
+    for lines in (g, [list(col) for col in zip(*g)]):
+        for row in lines:
+            run = 1
+            for a, b in zip(row, row[1:]):
+                if a == b:
+                    run += 1
+                else:
+                    score += run - 2 if run >= 5 else 0
+                    run = 1
+            score += run - 2 if run >= 5 else 0
+    for y in range(n - 1):
+        for x in range(n - 1):
+            if g[y][x] == g[y][x + 1] == g[y + 1][x] == g[y + 1][x + 1]:
+                score += 3
+    dark, total = sum(sum(r) for r in g), n * n
+    return score + max(0, (abs(dark * 20 - total * 10) + total - 1) // total - 1) * 10
+
+
+def qr_matrix(data, mask=None):
+    """The QR code of `data` (bytes, up to 78) as a list of rows of booleans (True = dark). mask None = the best-looking of the 8."""
+    n, words = _QR_N, _qr_codewords(data)
+    modules, func = [[False] * n for _ in range(n)], [[False] * n for _ in range(n)]
+
+    def put(x, y, dark):
+        modules[y][x] = dark
+        func[y][x] = True
+    for i in range(n):                                              # timing patterns
+        put(6, i, i % 2 == 0)
+        put(i, 6, i % 2 == 0)
+    for cx, cy in ((3, 3), (n - 4, 3), (3, n - 4)):                 # finder patterns with their light borders
+        for dy in range(-4, 5):
+            for dx in range(-4, 5):
+                if 0 <= cx + dx < n and 0 <= cy + dy < n:
+                    put(cx + dx, cy + dy, max(abs(dx), abs(dy)) not in (2, 4))
+    for dy in range(-2, 3):                                          # the one alignment pattern of version 4
+        for dx in range(-2, 3):
+            put(26 + dx, 26 + dy, max(abs(dx), abs(dy)) != 1)
+
+    def format_cells(m):
+        d = (1 << 3) | m                                             # error correction level L = 01, then the mask number
+        rem = d
+        for _ in range(10):
+            rem = (rem << 1) ^ ((rem >> 9) * 0x537)
+        bits = ((d << 10) | rem) ^ 0x5412
+        bit = lambda i: (bits >> i) & 1 == 1
+        cells = [(8, i, bit(i)) for i in range(6)] + [(8, 7, bit(6)), (8, 8, bit(7)), (7, 8, bit(8))] + [(14 - i, 8, bit(i)) for i in range(9, 15)]
+        cells += [(n - 1 - i, 8, bit(i)) for i in range(8)] + [(8, n - 15 + i, bit(i)) for i in range(8, 15)] + [(8, n - 8, True)]
+        return cells
+    for x, y, dark in format_cells(0):                               # reserve the format modules
+        put(x, y, dark)
+    i, total = 0, len(words) * 8
+    right = n - 1
+    while right >= 1:                                                # the data, in the zigzag the standard prescribes: column pairs from the right
+        if right == 6:                                               # the vertical timing column is skipped: the next pair is 5 and 4
+            right = 5
+        for vert in range(n):
+            for j in range(2):
+                x = right - j
+                y = n - 1 - vert if ((right + 1) & 2) == 0 else vert
+                if not func[y][x] and i < total:
+                    modules[y][x] = ((words[i >> 3] >> (7 - (i & 7))) & 1) == 1
+                    i += 1
+        right -= 2
+
+    def with_mask(m):
+        g = [row[:] for row in modules]
+        for y in range(n):
+            for x in range(n):
+                if not func[y][x] and _QR_MASKS[m](x, y):
+                    g[y][x] = not g[y][x]
+        for x, y, dark in format_cells(m):
+            g[y][x] = dark
+        return g
+    if mask is not None:
+        return with_mask(mask)
+    return min((with_mask(m) for m in range(8)), key=_qr_penalty)
+
+
+def qr_ansi(matrix, border=3):
+    """The QR code for a terminal: two rows per text line (a half block), black on white whatever the terminal's colours are."""
+    n = len(matrix)
+    dark = lambda x, y: 0 <= x < n and 0 <= y < n and matrix[y][x]
+    lines = []
+    for y in range(-border, n + border, 2):
+        lines.append("".join(f"\x1b[{30 if dark(x, y) else 97};{40 if dark(x, y + 1) else 107}m\u2580" for x in range(-border, n + border)) + "\x1b[0m")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------- the service logic (no sockets: testable)
+class Service:
+    def __init__(self, totp_file=None, state_file=None, log_file=None, clock=time.time, runner=None):
+        self.totp_file = totp_file or TOTP_FILE
+        self.state_file = state_file or STATE_FILE
+        self.log_file = log_file or LOG_FILE
+        self.clock = clock
+        self.runner = runner or self.run_command
+        self.lock = threading.Lock()
+        self.log_lock = threading.Lock()
+        self.noise = {}
+        self.tickets = {}                       # ticket -> (cmd_sha, expires_at, by, authenticator fingerprint)
+        st = self._load_state()
+        try:
+            self.last_step = int(st.get("last_step") or 0)
+            self.fails = [float(t) for t in (st.get("fails") or [])]
+            self.locked_until = float(st.get("locked_until") or 0)
+            self.level = int(st.get("level") or 0)
+            self.last_lock_at = float(st.get("last_lock_at") or 0)
+        except (TypeError, ValueError):
+            self.last_step, self.fails, self.locked_until, self.level, self.last_lock_at = 0, [], 0.0, 0, 0.0
+
+    # -- files
+    def secret(self):
+        try:
+            with open(self.totp_file, encoding="utf-8") as f:
+                return str(json.load(f).get("secret") or "")
+        except (OSError, ValueError, AttributeError):
+            return ""
+
+    def _load_state(self):
+        try:
+            with open(self.state_file, encoding="utf-8") as f:
+                data = json.load(f)
+                return data if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def _save_state(self):
+        """Replay protection and the lock-out must survive a restart. Returns False if it could not be written."""
+        try:            # `aidash-rootd enroll` runs in another process and records the code it used: never write an older value over it
+            self.last_step = max(self.last_step, int(self._load_state().get("last_step") or 0))
+        except (TypeError, ValueError):
+            pass
+        tmp = self.state_file + ".tmp"
+        try:
+            os.makedirs(os.path.dirname(self.state_file), mode=0o700, exist_ok=True)
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump({"last_step": self.last_step, "fails": self.fails, "locked_until": self.locked_until,
+                           "level": self.level, "last_lock_at": self.last_lock_at}, f)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, self.state_file)
+            return True
+        except OSError:
+            return False
+
+    def audit(self, event, **fields):
+        """One JSON line per event. Returns False if the line could not be written to the log file. The noisy refusals are
+        rate-limited (a flood must not fill the disk); everything that matters is always written."""
+        with self.log_lock:
+            if event in NOISY:
+                minute = int(self.clock() // 60)
+                slot = self.noise.setdefault(event, [minute, 0, 0])
+                if slot[0] != minute:
+                    left_out = slot[2]
+                    slot[:] = [minute, 0, 0]
+                    if left_out:
+                        self._write("suppressed", {"of": event, "count": left_out})
+                slot[1] += 1
+                if slot[1] > NOISY_PER_MINUTE:
+                    if slot[2] == 0:                        # the first one left out is announced at once, the count follows at the end of the minute
+                        self._write("rate_limited", {"of": event, "per_minute": NOISY_PER_MINUTE})
+                    slot[2] += 1
+                    return True
+            return self._write(event, fields)
+
+    def _write(self, event, fields):
+        line = json.dumps({"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(self.clock())), "event": event, **fields}, ensure_ascii=True)
+        try:
+            fd = os.open(self.log_file, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+            with os.fdopen(fd, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+            return True
+        except OSError:
+            print(line, file=sys.stderr, flush=True)
+            return False
+
+    # -- operations
+    def handle(self, req, peer="", uid=None):
+        op = req.get("op") if isinstance(req, dict) else None
+        try:
+            if op == "status":
+                return self.status()
+            if op == "authorize":
+                return self.authorize(req, peer)
+            if op == "exec":
+                return self.execute(req, peer)
+            if op == "unlock":
+                return self.unlock(peer, uid)
+        except Exception as e:                                   # a bug must answer, not kill the daemon
+            self.audit("error", op=op if isinstance(op, str) else "?", error=f"{e.__class__.__name__}: {str(e)[:200]}", peer=peer)
+            return {"ok": False, "error": "The root service hit an internal error."}
+        return {"ok": False, "error": "unknown operation"}
+
+    def status(self):
+        now = self.clock()
+        return {"ok": True, "enrolled": bool(self.secret()), "locked": now < self.locked_until,
+                "retry_after": max(0, int(self.locked_until - now)), "level": self.level}
+
+    def unlock(self, peer, uid):
+        if uid != 0:
+            return {"ok": False, "error": "Only root may unlock."}
+        with self.lock:
+            self.locked_until, self.fails, self.level = 0.0, [], 0
+            self._save_state()
+        self.audit("unlocked", peer=peer)
+        return {"ok": True}
+
+    def _failed(self, now, peer, by):
+        self.fails = [t for t in self.fails if now - t < DAY] + [now]
+        if sum(1 for t in self.fails if now - t < FAIL_WINDOW) >= FAIL_LIMIT or len(self.fails) >= DAY_LIMIT:
+            if now - self.last_lock_at > LEVEL_DECAY:
+                self.level = 0
+            seconds = LOCK_STEPS[min(self.level, len(LOCK_STEPS) - 1)]
+            self.level += 1
+            self.locked_until, self.last_lock_at, self.fails = now + seconds, now, []
+            self.audit("locked", peer=peer, seconds=seconds, level=self.level)
+        self.audit("authorize_bad", peer=peer, by=by)
+        self._save_state()
+
+    def authorize(self, req, peer):
+        with self.lock:
+            now = self.clock()
+            self.tickets = {t: v for t, v in self.tickets.items() if v[1] > now}
+            if len(self.tickets) >= MAX_TICKETS:                  # checked first: refusing must not use up the owner's code
+                return {"ok": False, "error": "Too many unused approvals are waiting. Wait two minutes."}
+            secret = self.secret()
+            if not secret:
+                return {"ok": False, "error": "Root commands are not set up: the owner must run `aidash-rootd enroll` on the server."}
+            if now < self.locked_until:
+                self.audit("authorize_locked", peer=peer)
+                return {"ok": False, "error": f"Too many wrong codes. Locked for another {int(self.locked_until - now) // 60 + 1} minute(s).", "locked": True}
+            code, sha = req.get("code"), req.get("cmd_sha")
+            if not (isinstance(code, str) and len(code) == 6 and code.isascii() and code.isdigit() and isinstance(sha, str) and HEX64.fullmatch(sha)):
+                return {"ok": False, "error": "Type the 6-digit code from the authenticator app."}
+            by = str(req.get("by") or "")[:60]
+            matched = matching_step(secret, code, now)
+            if matched is None:
+                self._failed(now, peer, by)
+                return {"ok": False, "error": "That code was not accepted (wrong or expired). Wait for the next code.", "locked": now < self.locked_until}
+            try:
+                self.last_step = max(self.last_step, int(self._load_state().get("last_step") or 0))      # e.g. the code typed when enrolling
+            except (TypeError, ValueError):
+                pass
+            if matched <= self.last_step:
+                # a RIGHT code that was already used (a double click, two tabs): nothing to guess from it, so it is not a failure
+                self.audit("authorize_replay", peer=peer, by=by)
+                return {"ok": False, "error": "That code was already used. Wait for the next code."}
+            before = self.last_step
+            self.last_step, self.fails = matched, []
+            if not self._save_state():
+                self.last_step = before
+                self.audit("error", op="authorize", error="state file not writable", peer=peer)
+                return {"ok": False, "error": "The root service cannot record the used code, so it refuses to approve."}
+            ticket = secrets.token_hex(16)
+            self.tickets[ticket] = (sha, now + TICKET_SECONDS, by, fingerprint(secret))
+            self.audit("authorize_ok", peer=peer, by=by, cmd_sha=sha)
+            return {"ok": True, "ticket": ticket, "valid_seconds": TICKET_SECONDS}
+
+    def execute(self, req, peer):
+        cmd, ticket = req.get("cmd"), req.get("ticket")
+        if not isinstance(cmd, str) or not cmd.strip() or len(cmd) > MAX_CMD:
+            return {"ok": False, "error": f"The command must be 1-{MAX_CMD} characters."}
+        try:
+            sha = cmd_sha(cmd)
+        except UnicodeEncodeError:
+            return {"ok": False, "error": "The command is not valid text."}
+        try:
+            timeout = max(5, min(int(req.get("timeout") or 600), MAX_TIMEOUT))
+        except (TypeError, ValueError, OverflowError):
+            timeout = 600
+        with self.lock:
+            now = self.clock()
+            entry = self.tickets.pop(ticket if isinstance(ticket, str) else "", None)         # one use, whatever happens next
+            secret = self.secret()
+            if entry is None or entry[1] < now:
+                self.audit("exec_unknown_ticket", peer=peer)
+                return {"ok": False, "error": "The approval expired or was already used. Ask for a new one."}
+            if not secret or entry[3] != fingerprint(secret):
+                self.audit("exec_refused", peer=peer, why="the authenticator was reset or changed", approved=entry[0])
+                return {"ok": False, "error": "The authenticator was reset or changed after this approval. Ask for a new one."}
+            if not hmac.compare_digest(entry[0], sha):
+                self.audit("exec_refused", peer=peer, why="command differs from the approved one", approved=entry[0])
+                return {"ok": False, "error": "That is not the command the owner approved."}
+            by = entry[2]
+        if not self.audit("exec_start", peer=peer, by=by, cmd_sha=sha, cmd=cmd, timeout=timeout):
+            return {"ok": False, "error": "The root service cannot write its log, so it will not run commands."}
+        started = self.clock()
+        res = self.runner(cmd, timeout)
+        exit_code, output = res[0], res[1]
+        timed_out = bool(res[2]) if len(res) > 2 else False
+        self.audit("exec_end", peer=peer, by=by, cmd_sha=sha, exit=exit_code, timed_out=timed_out, seconds=round(self.clock() - started, 1), output_chars=len(output))
+        return {"ok": True, "exit": exit_code, "output": output[-RETURN_OUTPUT:], "timed_out": timed_out}
+
+    @staticmethod
+    def run_command(cmd, timeout):
+        """bash -c as root, in / with a plain environment, in its own process group. Returns (exit code, output, timed_out).
+        The output goes to a root-only FILE, not to a pipe to this process: if the daemon is restarted or dies, the command does not
+        get SIGPIPE, and a service it started in the background keeps working. We wait for the shell to exit (not for the output to
+        end) and read the end of the file. A command that prints without end has its file cut when it passes OUT_CAP, so it cannot
+        fill the disk. When the time is up the whole group gets SIGTERM, and SIGKILL only after KILL_GRACE seconds."""
+        import fcntl
+        try:
+            os.makedirs(os.path.dirname(OUT_DIR), mode=0o700, exist_ok=True)
+            os.makedirs(OUT_DIR, mode=0o700, exist_ok=True)
+            fd, path = tempfile.mkstemp(prefix="out-", suffix=".log", dir=OUT_DIR)          # created 0600 by root
+            fcntl.fcntl(fd, fcntl.F_SETFL, fcntl.fcntl(fd, fcntl.F_GETFL) | os.O_APPEND)    # writes always go to the end, also after a cut
+        except OSError as e:
+            return 127, f"could not prepare the output file: {e}", False
+        try:
+            try:
+                p = subprocess.Popen(["bash", "-c", cmd], cwd="/", env=ENV, stdin=subprocess.DEVNULL, stdout=fd, stderr=fd, start_new_session=True)
+            except OSError as e:
+                return 127, f"could not start: {e}", False
+            deadline, cut, timed_out = time.monotonic() + timeout, False, False
+            while True:
+                try:
+                    code = p.wait(timeout=0.25)
+                    break
+                except subprocess.TimeoutExpired:
+                    pass
+                try:
+                    if os.fstat(fd).st_size > OUT_CAP:
+                        os.ftruncate(fd, 0)
+                        cut = True
+                except OSError:
+                    pass
+                if time.monotonic() >= deadline:
+                    timed_out, code = True, 124
+                    Service._stop_group(p)
+                    break
+            try:
+                size = os.fstat(fd).st_size
+                tail = os.pread(fd, MAX_OUTPUT, max(0, size - MAX_OUTPUT))
+            except OSError:
+                tail = b""
+            text = tail.decode("utf-8", errors="replace")
+            if cut:
+                text = "[earlier output was cut: the command printed more than " + str(OUT_CAP // (1024 * 1024)) + " MB]\n" + text
+            if timed_out:
+                text += f"\n[stopped after {timeout} s]"
+            return code, text, timed_out
+        finally:
+            os.close(fd)
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+
+    @staticmethod
+    def _stop_group(p):
+        """SIGTERM to the command's whole process group, SIGKILL after KILL_GRACE seconds (or at once if nothing is left to wait for)."""
+        try:
+            os.killpg(p.pid, signal.SIGTERM)
+        except OSError:
+            pass
+        end = time.monotonic() + KILL_GRACE
+        while time.monotonic() < end:
+            p.poll()                                    # reaps the shell, so only real survivors keep the group alive
+            try:
+                os.killpg(p.pid, 0)
+            except OSError:
+                break                                   # nobody left in the group
+            time.sleep(0.25)
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        try:
+            p.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+
+
+# ---------------------------------------------------------------- the socket
+class Handler(socketserver.StreamRequestHandler):
+    service = None
+    allowed_uids = frozenset()          # nobody, unless serve() says who
+    timeout = 10
+
+    def handle(self):
+        try:
+            self._handle()
+        except OSError:       # timed out, or the client went away (the command, if any, has still been audited)
+            pass
+
+    def _read_line(self):
+        deadline = time.monotonic() + CONN_DEADLINE
+        buf = b""
+        while b"\n" not in buf and len(buf) < REQUEST_LINE:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise socket.timeout("request too slow")
+            self.request.settimeout(min(left, 5))
+            chunk = self.request.recv(8192)
+            if not chunk:
+                break
+            buf += chunk
+        return buf.split(b"\n", 1)[0]
+
+    def _handle(self):
+        uid = peer_uid(self.request)
+        if uid not in self.allowed_uids:
+            self.service.audit("connection_refused", uid=uid)
+            return
+        try:
+            req = json.loads(self._read_line().decode("utf-8"))
+        except (ValueError, RecursionError):
+            resp = {"ok": False, "error": "bad request"}
+        else:
+            resp = self.service.handle(req, peer=f"uid {uid}", uid=uid)
+        self.request.settimeout(RESPONSE_TIMEOUT)
+        self.request.sendall((json.dumps(resp) + "\n").encode("utf-8"))
+
+
+class Server(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
+    daemon_threads = True
+    request_queue_size = 64
+
+    def __init__(self, *args, **kwargs):
+        self.slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
+        super().__init__(*args, **kwargs)
+
+    def verify_request(self, request, client_address):
+        """Who is on the other end is checked BEFORE a thread is started for them."""
+        uid = peer_uid(request)
+        if uid in getattr(self.RequestHandlerClass, "allowed_uids", frozenset()):
+            return True
+        svc = getattr(self.RequestHandlerClass, "service", None)
+        if svc is not None:
+            svc.audit("connection_refused", uid=uid)
+        return False
+
+    def process_request(self, request, client_address):
+        if not self.slots.acquire(blocking=False):          # too many at once: drop, never pile up threads
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:                               # e.g. "can't start new thread": the slot comes back
+            self.slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.slots.release()
+
+
+def serve():
+    import grp
+    import pwd
+    os.umask(0o022)                                          # the commands it runs get a normal umask; its own files set their modes
+    os.makedirs(os.path.dirname(STATE_FILE), mode=0o700, exist_ok=True)
+    os.chmod(os.path.dirname(STATE_FILE), 0o700)
+    allowed = frozenset({0} | {pwd.getpwnam(u).pw_uid for u in ALLOWED_USERS if _user_exists(u)})
+    gid = grp.getgrnam(SOCKET_GROUP).gr_gid
+    os.makedirs(SOCKET_DIR, mode=0o750, exist_ok=True)
+    os.chown(SOCKET_DIR, 0, gid)
+    os.chmod(SOCKET_DIR, 0o750)
+    if os.path.exists(SOCKET):
+        os.unlink(SOCKET)
+    try:
+        for name in os.listdir(OUT_DIR):                    # output files of commands that ran under an earlier daemon (unlinking is safe: they keep writing)
+            if name.startswith("out-") and name.endswith(".log"):
+                os.unlink(os.path.join(OUT_DIR, name))
+    except OSError:
+        pass
+    Handler.service, Handler.allowed_uids = Service(), allowed
+    with Server(SOCKET, Handler) as srv:
+        os.chown(SOCKET, 0, gid)
+        os.chmod(SOCKET, 0o660)
+        Handler.service.audit("started", allowed_uids=sorted(allowed), enrolled=bool(Handler.service.secret()))
+        srv.serve_forever()
+
+
+def _user_exists(name):
+    import pwd
+    try:
+        pwd.getpwnam(name)
+        return True
+    except KeyError:
+        return False
+
+
+# ---------------------------------------------------------------- owner commands
+def _daemon_call(req):
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(10)
+    try:
+        s.connect(SOCKET)
+        s.sendall((json.dumps(req) + "\n").encode("utf-8"))
+        buf = b""
+        while not buf.endswith(b"\n"):
+            chunk = s.recv(65536)
+            if not chunk:
+                break
+            buf += chunk
+        return json.loads(buf.decode("utf-8"))
+    finally:
+        s.close()
+
+
+def enroll():
+    if os.geteuid() != 0:
+        print("Run this as root on the server.")
+        return 1
+    if Service().secret():
+        print("An authenticator is already enrolled. To replace it run: aidash-rootd reset   (then enroll again).")
+        return 1
+    secret = new_secret()
+    uri = f"otpauth://totp/AI%20dashboard%20root?secret={secret}"
+    grouped = " ".join(secret[i:i + 4] for i in range(0, len(secret), 4))
+    print("\nAdd this to your authenticator app (Google Authenticator, Authy, …).")
+    try:
+        qr = qr_ansi(qr_matrix(uri.encode("ascii")))
+    except Exception:
+        qr = ""
+    if qr:
+        print("\nEasiest: in the app choose 'Scan a QR code' and scan this one (make the terminal tall enough to show all of it; hold the phone ~20 cm away):\n")
+        print(qr)
+    print("\nOr choose 'Enter a setup key' and type it (time based, 6 digits):")
+    print(f"\n    Account: AI dashboard root\n    Key:     {grouped}\n")
+    print("This key is shown only now and is stored only in the root-only file " + TOTP_FILE + ". It is not in the dashboard.")
+    matched = None
+    for attempt in range(1, ENROLL_TRIES + 1):
+        try:
+            code = input("\nType the 6-digit code your app shows NOW, then press Enter: ").strip().replace(" ", "")
+        except EOFError:
+            code = ""
+        matched = matching_step(secret, code, time.time()) if (len(code) == 6 and code.isascii() and code.isdigit()) else None
+        if matched is not None or attempt == ENROLL_TRIES:
+            break
+        print(f"That code is not right ({ENROLL_TRIES - attempt} more tries). Wait for the next code in the app and type it right away.")
+        if attempt == 2:
+            print("If it keeps failing, the key in the app is probably not the same as this one (or the entry is not 'time based').\n"
+                  "Delete the entry in the app and add it again, from this key:\n\n    " + grouped)
+    if matched is None:
+        print("\nToo many wrong codes — nothing was saved. Run the command again (it makes a NEW key: delete the old entry in the app first).")
+        return 1
+    os.makedirs(CONFIG_DIR, mode=0o700, exist_ok=True)
+    os.chmod(CONFIG_DIR, 0o700)
+    os.chown(CONFIG_DIR, 0, 0)
+    tmp = TOTP_FILE + ".tmp"
+    try:
+        os.unlink(tmp)
+    except FileNotFoundError:
+        pass
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)          # never readable by anyone else, not even for a moment
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump({"secret": secret, "enrolled_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, f)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, TOTP_FILE)
+    svc = Service()
+    svc.last_step = max(svc.last_step, matched)                              # the code just typed cannot be used again
+    svc._save_state()
+    svc.audit("enrolled")
+    print("Done. Root commands are now possible: every one needs a fresh code from this app.")
+    return 0
+
+
+def reset():
+    if os.geteuid() != 0:
+        print("Run this as root on the server.")
+        return 1
+    try:
+        os.unlink(TOTP_FILE)
+        Service().audit("reset")
+        print("The authenticator was removed; approvals that were still waiting are void. Root commands are off until you run: aidash-rootd enroll")
+    except OSError:
+        print("Nothing was enrolled.")
+    return 0
+
+
+def unlock():
+    if os.geteuid() != 0:
+        print("Run this as root on the server.")
+        return 1
+    try:
+        r = _daemon_call({"op": "unlock"})
+    except (OSError, ValueError):
+        print("The root service is not running (systemctl start aidash-rootd).")
+        return 1
+    print("Unlocked." if r.get("ok") else "Not unlocked: " + str(r.get("error")))
+    return 0 if r.get("ok") else 1
+
+
+def status():
+    try:
+        s = _daemon_call({"op": "status"})
+        s["service"] = "running"
+    except (OSError, ValueError):
+        s = dict(Service().status(), service="NOT running")
+    print(json.dumps(s))
+    return 0
+
+
+def main(argv):
+    cmd = argv[1] if len(argv) > 1 else ""
+    if cmd not in ("serve", "enroll", "reset", "unlock", "status"):
+        print(__doc__)
+        return 2
+    return {"serve": lambda: serve() or 0, "enroll": enroll, "reset": reset, "unlock": unlock, "status": status}[cmd]()
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="page-head">
+    <h1>AI cost</h1>
+    <p>What Claude costs, and how much prepaid Anthropic credit is left. Only the owner sees this page.</p>
+  </div>
+
+  {% if left is not none and low and left < low %}
+    <div class="pc-now s-bad wrap">{{ icon('alert') }}<span>Anthropic balance is low — about ${{ "%.2f"|format(left) }} left<small>Add credit at console.anthropic.com → Billing, then record the top-up below.</small></span></div>
+  {% elif left is none %}
+    <div class="pc-now s-warn wrap">{{ icon('coin') }}<span>Balance not recorded yet<small>Open console.anthropic.com → Billing, and type the balance you see there in “Record balance / top-up” below.</small></span></div>
+  {% endif %}
+
+  <div class="kpis k4" role="group" aria-label="AI spend summary">
+    <div class="kpi static{% if left is not none and low and left < low %} alarm{% endif %}" style="--h:150"><span class="kpi-ic">{{ icon('coin') }}</span>
+      <b>{{ "$%.2f"|format(left) if left is not none else "—" }}</b><span class="l">Balance left (estimate)</span></div>
+    <div class="kpi static" style="--h:215"><span class="kpi-ic">{{ icon('activity') }}</span><b>${{ "%.2f"|format(today_spend) }}</b><span class="l">Today</span></div>
+    <div class="kpi static" style="--h:265"><span class="kpi-ic">{{ icon('activity') }}</span><b>${{ "%.2f"|format(week_spend) }}</b><span class="l">This week</span></div>
+    <div class="kpi static" style="--h:35"><span class="kpi-ic">{{ icon('activity') }}</span><b>${{ "%.2f"|format(month_spend) }}</b><span class="l">This month</span></div>
+  </div>
+  {% if base %}<p class="hint">Estimate = balance recorded {{ base.created_at|stamp }} (${{ "%.2f"|format(base.amount_usd) }}) + top-ups since − Claude's cost since. Record the Console's balance now and then to keep it exact.</p>{% endif %}
+
+  <div class="card-grid">
+    <section class="card" aria-labelledby="h-daily">
+      <h2 id="h-daily"><span class="h-ic" style="--h:215">{{ icon('activity') }}</span>Last 14 days</h2>
+      <div class="bars" role="img" aria-label="Spend per day for the last 14 days">
+        {% for d, v in daily.items() %}
+          <div class="bar" title="{{ d.strftime('%-d %b') }}: ${{ '%.2f'|format(v) }}"><span style="--v:{{ (v * 100 / peak)|round(1) if v else 0 }}%"></span><small>{{ d.strftime('%-d') }}</small></div>
+        {% endfor %}
+      </div>
+      {% if models %}
+        <div class="rows">
+          {% for m in models %}
+            <div class="row"><span class="row-main"><span class="row-title">{{ m.label }}</span><span class="row-sub">{{ m.calls }} call{{ "" if m.calls == 1 else "s" }} this month</span></span>
+              <span class="row-side mono">${{ "%.2f"|format(m.cost) }}</span></div>
+          {% endfor %}
+        </div>
+      {% else %}<p class="hint">No Claude calls this month yet.</p>{% endif %}
+    </section>
+
+    <section class="card" aria-labelledby="h-top">
+      <h2 id="h-top"><span class="h-ic" style="--h:265">{{ icon('list') }}</span>Most expensive changes this month</h2>
+      {% if top_changes %}
+        <div class="rows">
+          {% for t in top_changes %}
+            <a class="row row-btn" href="{{ url_for('projects.detail', project_id=t.c.project_id, change=t.c.id) }}#chat">
+              <span class="row-lead"><span class="pav xs" style="--h:{{ hue(t.c.project) }}">{{ initials(t.c.project.name) }}</span>
+                <span class="row-main"><span class="row-title">{{ t.c.title }}</span><span class="row-sub">{{ t.c.project.name }} · {{ t.calls }} call{{ "" if t.calls == 1 else "s" }} · {{ t.c.agent_preset|capitalize }}</span></span></span>
+              <span class="row-side mono">${{ "%.2f"|format(t.cost) }}</span></a>
+          {% endfor %}
+        </div>
+      {% else %}<p class="hint">Nothing yet this month.</p>{% endif %}
+    </section>
+
+    <section class="card" id="limits" aria-labelledby="h-lim">
+      <h2 id="h-lim"><span class="h-ic" style="--h:35">{{ icon('grid') }}</span>By project this month · limits</h2>
+      <p class="hint">Optional monthly limit per project. At 80% you get an alert; at 100% developers can't start new Claude work there — only you can. Empty = no limit.</p>
+      <div class="rows">
+        {% for r in projects %}
+          <div class="row lim-row">
+            <span class="row-lead"><span class="pav xs" style="--h:{{ hue(r.p) }}">{{ initials(r.p.name) }}</span>
+              <span class="row-main"><span class="row-title">{{ r.p.name }}</span>
+                <span class="row-sub mono">${{ "%.2f"|format(r.spent) }}{% if r.lim is not none %} of ${{ "%.2f"|format(r.lim) }} · {{ r.pct }}%{% endif %}</span>
+                {% if r.lim is not none %}<span class="meter{% if r.pct >= 100 %} m-bad{% elif r.pct >= 80 %} m-warn{% endif %}"><span style="width:{{ [r.pct, 100]|min }}%"></span></span>{% endif %}</span></span>
+            <form method="post" action="{{ url_for('ai_cost.save_limit', project_id=r.p.id) }}" class="lim-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <label class="sr-only" for="lim-{{ r.p.id }}">Monthly limit for {{ r.p.name }} (US$)</label>
+              <input id="lim-{{ r.p.id }}" name="limit" inputmode="decimal" placeholder="No limit" value="{{ '%.2f'|format(r.lim) if r.lim is not none else '' }}">
+              <button class="btn btn-sm" type="submit">Save</button>
+            </form>
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="h-credit">
+      <h2 id="h-credit"><span class="h-ic" style="--h:150">{{ icon('coin') }}</span>Record balance / top-up</h2>
+      <p class="hint">Anthropic doesn't tell other apps your balance, so type it here. Billing stays <strong>prepaid credit with auto-reload off</strong> — nothing is charged to a card on its own.</p>
+      <form method="post" action="{{ url_for('ai_cost.add_credit') }}" class="form-grid">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-row two">
+          <div class="field"><label for="cr-kind">What is it?</label><select id="cr-kind" name="kind">
+            <option value="balance">Balance shown in the Console now</option>
+            <option value="topup">Credit I just bought (top-up)</option></select></div>
+          <div class="field"><label for="cr-amt">Amount (US$)</label><input id="cr-amt" name="amount" inputmode="decimal" placeholder="25.00" required></div>
+        </div>
+        <div class="field"><label for="cr-note">Note <span class="hint">(optional)</span></label><input id="cr-note" name="note" maxlength="200" placeholder="e.g. invoice number"></div>
+        <div><button class="btn btn-primary" type="submit">Save</button></div>
+      </form>
+      {% if credits %}
+        <div class="rows">
+          {% for e in credits %}
+            <div class="row"><span class="row-main"><span class="row-title">{{ "Balance recorded" if e.kind == "balance" else "Top-up" }}{% if e.note %} · {{ e.note }}{% endif %}</span><span class="row-sub">{{ e.created_at|stamp }}{% if e.by_user %} · {{ e.by_user.name }}{% endif %}</span></span>
+              <span class="row-side mono">{{ "" if e.kind == "balance" else "+" }}${{ "%.2f"|format(e.amount_usd) }}</span></div>
+          {% endfor %}
+        </div>
+      {% endif %}
+      <form method="post" action="{{ url_for('ai_cost.save_alert') }}" class="form-grid">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="field"><label for="low">Telegram alert when the balance falls below (US$)</label>
+          <input id="low" name="low" inputmode="decimal" value="{{ '%.2f'|format(low) }}"><span class="hint">0 = no alert. You also get an alert if Anthropic ever refuses a request for low credit.</span></div>
+        <div><button class="btn" type="submit">Save alert amount</button></div>
+      </form>
+    </section>
+  </div>
+{% endblock %}

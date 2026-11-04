@@ -1,0 +1,16 @@
+{# Name / email / mobile / project ticks — shared by "Add user" and "Edit". u = None for a new user. #}
+{% set sfx = u.id if u else "new" %}
+<div class="form-row two">
+  <div class="field"><label for="u-name-{{ sfx }}">Name</label><input id="u-name-{{ sfx }}" name="name" value="{{ (u.name or '') if u else '' }}" required></div>
+  <div class="field"><label for="u-mobile-{{ sfx }}">Mobile</label><input id="u-mobile-{{ sfx }}" name="mobile" inputmode="tel" value="{{ (u.mobile or '') if u else '' }}" required></div>
+</div>
+<div class="field"><label for="u-email-{{ sfx }}">Email</label><input id="u-email-{{ sfx }}" name="email" type="email" value="{{ (u.email or '') if u else '' }}" required></div>
+<div class="field"><span class="label">Role</span><span class="hint">Developer — sees and works only on the projects ticked below. There is one owner; clients never get a login.</span></div>
+{% set have = u.memberships|map(attribute="project_id")|list if u else [] %}
+<div class="field"><span class="label">Projects</span>
+  <div class="proj-ticks">
+    {% for p in projects %}
+      <label class="check"><input type="checkbox" name="projects" value="{{ p.id }}"{% if p.id in have %} checked{% endif %}> <span>{{ p.name }}</span></label>
+    {% endfor %}
+  </div>
+</div>

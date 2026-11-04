@@ -1,0 +1,18 @@
+[Unit]
+Description=AI Project Dashboard (Gunicorn, 127.0.0.1:5090)
+After=network.target
+
+[Service]
+User=__SITEUSER__
+Group=__SITEUSER__
+WorkingDirectory=__APP__
+EnvironmentFile=/etc/ai-dashboard/dashboard.env
+# 0007: files the dashboard (and Claude's checkouts) create are never readable by other users on this server
+UMask=0007
+ExecStart=__APP__/venv/bin/gunicorn -c gunicorn_config.py wsgi:app
+Restart=always
+RestartSec=3
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

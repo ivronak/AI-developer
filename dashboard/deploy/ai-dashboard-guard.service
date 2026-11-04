@@ -1,0 +1,10 @@
+[Unit]
+Description=AI dashboard: check that the dashboard's code on the server is still our last checkpoint
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/sbin/aidash-code-guard check
+TimeoutStartSec=300
+PrivateTmp=true
+NoNewPrivileges=true
