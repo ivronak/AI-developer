@@ -1,7 +1,9 @@
 #!/bin/bash
 # Deploy the dashboard code from this Mac to the server: code only — instance/ (database + keys) is never sent.
 # Backs up the database, installs packages, runs migrations, restarts ONLY ai-dashboard, then health-checks.
-# Usage (from dashboard/):  bash deploy/deploy.sh            first time:  bash deploy/deploy.sh --setup
+# Usage (from dashboard/):  bash deploy/deploy.sh --git      (owner, 2026-11-04: push to GitHub first, the server pulls that commit)
+#                           bash deploy/deploy.sh            (old way: upload this folder)   first time:  bash deploy/deploy.sh --setup
+# --git also saves the code guard's checkpoint from the pulled source, so there is nothing to do by hand afterwards.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 HOST=root@200.97.162.57
@@ -10,12 +12,34 @@ APP=/home/$SITE/app
 KEY="$HOME/.ssh/aidash_deploy_ed25519"
 SSH=(ssh -i "$KEY" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/aidash_known_hosts" "$HOST")
 
-echo "→ uploading code"
+REPO_URL=https://github.com/ivronak/AI-developer.git      # public repo: the server pulls over HTTPS with no key
+REPO=/var/lib/aidash-repo
 STAGE=/tmp/aidash-upload-$$
-COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata --exclude=./venv --exclude=./instance --exclude=./tests --exclude='__pycache__' --exclude='.DS_Store' --exclude='._*' -czf - . \
-  | "${SSH[@]}" "rm -rf $STAGE && mkdir -p $STAGE && tar -xzf - -C $STAGE"
+MODE=${1:-}
+if [ "$MODE" = "--git" ]; then
+  [ -z "$(git -C .. status --porcelain -- .)" ] || { echo "✗ dashboard/ has changes that are not committed — commit and push first"; exit 1; }
+  SHA=$(git -C .. rev-parse HEAD)
+  git -C .. fetch -q origin main
+  [ "$(git -C .. rev-parse origin/main)" = "$SHA" ] || { echo "✗ GitHub's main is not this commit ($SHA) — push first"; exit 1; }
+  echo "→ the server pulls $SHA from GitHub"
+  "${SSH[@]}" bash -s -- "$REPO_URL" "$REPO" "$SHA" "$STAGE" <<'PULL'
+set -euo pipefail
+URL=$1; REPO=$2; SHA=$3; STAGE=$4
+touch /run/aidash-deploying                 # the code guard does not alarm while a deploy is half done
+[ -d "$REPO/.git" ] || git clone -q "$URL" "$REPO"
+git -C "$REPO" fetch -q origin main
+git -C "$REPO" checkout -q --detach "$SHA"
+rm -rf "$STAGE" && mkdir -p "$STAGE"
+rsync -a --exclude=/venv --exclude=/instance --exclude=/tests --exclude=__pycache__ --exclude=.DS_Store --exclude='._*' "$REPO/dashboard/" "$STAGE/"
+PULL
+  MODE=""
+else
+  echo "→ uploading code"
+  COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata --exclude=./venv --exclude=./instance --exclude=./tests --exclude='__pycache__' --exclude='.DS_Store' --exclude='._*' -czf - . \
+    | "${SSH[@]}" "rm -rf $STAGE && mkdir -p $STAGE && tar -xzf - -C $STAGE"
+fi
 
-"${SSH[@]}" bash -s -- "$STAGE" "$SITE" "$APP" "${1:-}" <<'REMOTE'
+"${SSH[@]}" bash -s -- "$STAGE" "$SITE" "$APP" "$MODE" <<'REMOTE'
 set -euo pipefail
 STAGE=$1; SITE=$2; APP=$3; MODE=${4:-}
 if [ "$MODE" = "--setup" ]; then bash "$STAGE/deploy/setup_server.sh" "$SITE"; fi
@@ -47,3 +71,9 @@ done
 echo "✗ health check failed — last 30 log lines:"; journalctl -u ai-dashboard -n 30 --no-pager
 exit 1
 REMOTE
+
+if [ "${1:-}" = "--git" ]; then
+  echo "→ code guard checkpoint (from the pulled source, tests included)"
+  MSG=$(git -C .. log -1 --format=%s)
+  "${SSH[@]}" aidash-code-guard save "$REPO/dashboard" "$(printf %q "git ${SHA:0:7}: $MSG")"
+fi

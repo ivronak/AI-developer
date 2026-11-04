@@ -125,3 +125,12 @@ before. Sudoers is unchanged (the folder is passed as an `env` argument). The 5-
 account hourly and renews a run-out login. Removing an account runs `claude auth logout` and deletes only its own folder;
 revoke it on claude.ai too. The old setup-token was blanked by migration `a1c3e5f7b9d2` — revoke it on claude.ai
 (Settings → Claude Code tokens) if it is still listed there.
+
+## Deploy from GitHub (owner, 2026-11-04 — the normal way now)
+1. Flow tests green, then commit and **push** to `ivronak/AI-developer` (`main`). The repo is **public** (owner's choice,
+   2026-11-04) — never commit a secret, `instance/` or `venv/` (both git-ignored).
+2. `bash deploy/deploy.sh --git` from `dashboard/`. It refuses when `dashboard/` has uncommitted changes or GitHub's
+   `main` is not your commit. The server clones / fetches the repo over HTTPS into `/var/lib/aidash-repo` (root, no key
+   needed), checks out exactly that commit, then backup → install → packages → migrations → restart → health check as
+   before, and finally saves the code-guard checkpoint from `/var/lib/aidash-repo/dashboard` itself.
+The old upload mode (`bash deploy/deploy.sh` without `--git`) still works; after it, run `aidash-code-guard save` by hand.
