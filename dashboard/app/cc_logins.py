@@ -417,6 +417,6 @@ def fmt_left(delta):
         return "—"
     s = int(delta.total_seconds())
     if s <= 0:
-        return "renews on the next run"
-    return f"{s // 3600} h {s % 3600 // 60} min" if s >= 3600 else f"{s // 60} min"
+        return "renews by itself on the next run"
+    return "renews in " + (f"{s // 3600} h {s % 3600 // 60} min" if s >= 3600 else f"{s // 60} min")
 

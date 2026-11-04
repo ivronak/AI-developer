@@ -7,7 +7,8 @@ Big picture lives in `TRACKER.md` (status, decisions) and `CHANGES.md` (the "zer
 ## Snapshot (2026-10-17)
 - **Live dashboard:** https://aided.ivinfotech.com on the IV VPS (200.97.162.57, AlmaLinux 9, CyberPanel +
   OpenLiteSpeed). Same machine runs the Verixa CRM (real users) and ~15 client sites — never touch them.
-  Deploy only with `bash deploy/deploy.sh` from `dashboard/` (tests first). Map: `dashboard/deploy/DEPLOY.md`.
+  Deploy (since 2026-11-04): tests → commit → push to GitHub → `bash deploy/deploy.sh --git` from `dashboard/`.
+  Map: `dashboard/deploy/DEPLOY.md`.
 - **SSH from the Mac:** `~/.ssh/aidash_deploy_ed25519` (root), host key in `~/.ssh/aidash_known_hosts`.
 - **Built (v1 steps):** sign-in + authenticator, users & log, projects, GitHub sync, monitor + Telegram, Claude chat
   (engine Claude API or Claude Code on the server, one session per project), beta deploy + auto beta deploy after a
@@ -398,4 +399,11 @@ Big picture lives in `TRACKER.md` (status, decisions) and `CHANGES.md` (the "zer
   Checked: 443 flow checks (fake CLI: add → wrong / right code → second account → pick per message → keep-alive →
   one logout alert → remove), unit tests 293 (1 Mac-only `stat` failure), browser on a DB copy with a fake CLI
   (desktop + 375px). Also: the Mac's `dashboard/` was 2 weeks behind the server — pulled the server source first.
-  **Not deployed yet.** Next: deploy (then `aidash-code-guard save`), press Check now on Main account, add accounts.
+  Deployed the same day (see next entry).
+- **2026-11-04 · Deploys now go through GitHub (owner).** The whole project (mock UI, docs, `dashboard/`) is pushed to
+  `ivronak/AI-developer` (**public** — the owner chose this knowing it shows the server IP, the root-command design and
+  client site names; no secrets are in it: scanned before the push). `bash deploy/deploy.sh --git`: refuses uncommitted
+  changes / an unpushed commit, the server fetches that exact commit over HTTPS into `/var/lib/aidash-repo`, installs
+  it like before, then saves the code-guard checkpoint from that folder. First run: commit 9670065, migration
+  a1c3e5f7b9d2 ran, healthy, guard checkpoint d1726af. Live check: Main account (the runner's own web login) → Logged
+  in, Max, 13 models, 8 connectors. Next: owner adds more accounts from Settings; revoke the old setup-token on claude.ai.

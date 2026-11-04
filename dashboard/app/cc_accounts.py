@@ -118,7 +118,7 @@ def build(month_cost=None, api_projects=0, cc_projects=()):
         if acc.status == "ok":
             status = ("Logged in", "ok")
             facts = [("Plan", (acc.plan or "—").title()), ("Account", acc.email_hint or "—"),
-                     ("Models", str(len(acc.models or []))), ("Login renews in", cc_logins.fmt_left(cc_logins.expires_in(acc)))]
+                     ("Models", str(len(acc.models or []))), ("Login", cc_logins.fmt_left(cc_logins.expires_in(acc)).capitalize())]
         elif acc.status == "logged_out":
             status, facts = ("Logged out", "bad"), [("Fix", "Settings → Claude Code → Log in")]
         elif acc.status == "error":

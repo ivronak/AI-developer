@@ -119,7 +119,7 @@
                 {% else %}<span class="pill pill-muted">Not checked yet</span>{% endif %}
               </div>
               <p class="hint">
-                {% if a.status == "ok" %}{{ (a.plan or "plan not shown")|title }}{% if a.email_hint %} · {{ a.email_hint }}{% endif %} · {{ row.models }} model{{ "" if row.models == 1 else "s" }}{% if a.connectors %} · connectors: {{ a.connectors|map(attribute="name")|join(", ") }}{% endif %}{% if a.expires_at %} · login renews in {{ row.left }}{% endif %}{% endif %}
+                {% if a.status == "ok" %}{{ (a.plan or "plan not shown")|title }}{% if a.email_hint %} · {{ a.email_hint }}{% endif %} · {{ row.models }} model{{ "" if row.models == 1 else "s" }}{% if a.connectors %} · connectors: {{ a.connectors|map(attribute="name")|join(", ") }}{% endif %}{% if a.expires_at %} · login {{ row.left }}{% endif %}{% endif %}
                 {% if a.last_error %}{{ a.last_error }}{% endif %}
                 {% if a.checked_at %} · checked {{ a.checked_at|stamp }}{% endif %}
                 {% if not a.slug %} · the server user's own login{% endif %}
