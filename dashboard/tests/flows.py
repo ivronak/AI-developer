@@ -587,7 +587,7 @@ with app.app_context():
     db.session.refresh(newp)
     ok(b"Servers &amp; deploy saved" in r.data and newp.env("beta").server_id == s1.id and newp.env("live").db_name == "crm_live",
        "owner saves servers & deploy")
-    ok(newp.deploy_script == "", "an unchanged template is not stored (it follows the tech stack)")
+    ok(newp.deploy_script == "" and b'name="deploy_script"' not in c.get(f"/projects/{newp.id}").data, "no deploy-steps box on the page; the default steps follow the tech stack")
 
     # live auto-detect (read-only; only fills the form)
     _det_keep, _det_scripts = remote_mod.run, []

@@ -426,3 +426,4 @@ Big picture lives in `TRACKER.md` (status, decisions) and `CHANGES.md` (the "zer
 
 - 2026-11-05 · Project memory (auto / pick md files) replaces Project notes · project_notes.py (block, memory_text), github.list_doc_files, projects.save_memory + memory-files, migration c3e5a7b9d1f2 · 434 checks · next: deploy, try on Ikonevents.
 - 2026-11-05 · Live auto-detect in Servers & deploy · deploy.detect_script/parse_detect/detect_live, projects.detect_live route, project.js button · 443 checks · no migration · next: try on Ikonevents live (server + live address must be saved first).
+- 2026-11-05 · Deploy-steps textarea removed from Servers & deploy (default template still used; stored deploy_script kept) · 443 checks · no migration.

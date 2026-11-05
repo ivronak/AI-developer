@@ -83,7 +83,7 @@ def detail(project_id):
                            live_now=live_now, backups=backups, devs=devs, STEPS=STEPS, STEP_INDEX=STEP_INDEX,
                            status_info=status_info, servers=Server.query.order_by(Server.name).all(),
                            recent_jobs=recent_jobs, running_job=running_job, busy=jobs.busy_reason(p.id),
-                           deploy_template=deploy.template_for(p), env_off_example=deploy.default_env_off(p),
+                           env_off_example=deploy.default_env_off(p),
                            rb_cur=rb_cur, rb_target=rb_target, last_snap=last_snap, on_beta=on_beta,
                            beta_login=__import__("app.betas", fromlist=["beta_auth"]).beta_auth(p.env("beta")),
                            repo_problem=__import__("app.gitcheck", fromlist=["problem"]).problem(p, p.env("live")),
@@ -528,8 +528,6 @@ def save_deploy(project_id):
         return back
     p.beta_env_off, p.beta_env_test, p.beta_env_sandbox = texts["beta_env_off"], texts["beta_env_test"], texts["beta_env_sandbox"]
     p.db_engine = f.get("db_engine") if f.get("db_engine") in ("mysql", "postgres", "sqlite") else "mysql"
-    script = (f.get("deploy_script") or "").replace("\r\n", "\n").strip()[:8000]
-    p.deploy_script = "" if script == deploy.template_for(p).strip() else script
     log("Project settings", project_id=p.id, details="Servers & deploy saved")
     db.session.commit()
     from app.betas import maybe_auto_setup

@@ -576,9 +576,6 @@
         <option value="postgres"{% if p.db_engine == "postgres" %} selected{% endif %}>PostgreSQL</option>
         <option value="sqlite"{% if p.db_engine == "sqlite" %} selected{% endif %}>SQLite (a file — database name sqlite:path/in/the/folder.db)</option></select>
         <span class="hint">Live → Beta sync reads live with a dump and loads it into the beta database. The database password stays on the servers (<span class="mono">~/.my.cnf</span> / <span class="mono">~/.pgpass</span> of the SSH user) — never in the dashboard.</span></div>
-      <div class="field"><label for="deploy-script">Deploy steps <span class="hint">(run on the server inside the project folder; <span class="mono">{branch}</span> = beta or main)</span></label>
-        <textarea id="deploy-script" name="deploy_script" class="mono" rows="9">{{ p.deploy_script or deploy_template }}</textarea>
-        <span class="hint">Pre-filled for {{ p.tech_stack|join(", ") or "a plain site" }}. Change it if this project needs something else. Stops at the first step that fails.</span></div>
       <p><strong>Beta safety lines</strong> <span class="hint">— written into beta's <span class="mono">.env</span> on every beta deploy and after every sync, so beta never messages real users or takes real money. One <span class="mono">KEY=value</span> per line.</span></p>
       <div class="form-row two">
         <div class="field"><label for="env-off">When messages are Off</label><textarea id="env-off" name="beta_env_off" class="mono" rows="4" placeholder="{{ env_off_example or 'SMS_ENABLED=false' }}">{{ p.beta_env_off }}</textarea></div>
