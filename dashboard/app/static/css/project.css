@@ -297,6 +297,6 @@
 .chat-panel > .pick { flex: none; }
 .chat-scroll { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .chat-scroll > [data-change] { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
-.chat-scroll > [data-change] > .ccard { flex: none; max-height: 48%; overflow-y: auto; }
-.thread-box { flex: 1; min-height: 120px; overflow-y: auto; overscroll-behavior: contain; padding: 12px; border-radius: var(--r-lg);
+.chat-scroll > [data-change] > .ccard { flex: none; }
+.thread-box { flex: 1; min-height: 200px; overflow-y: auto; overscroll-behavior: contain; padding: 12px; border-radius: var(--r-lg);
   border: 1px solid var(--line); background: var(--surface); outline: none; }

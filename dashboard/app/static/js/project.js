@@ -7,7 +7,10 @@ document.addEventListener("DOMContentLoaded", function () {
   function fitChat() {
     var panel = document.querySelector(".chat-panel"), tb = document.getElementById("tabs");
     if (!panel || !tb || panel.hidden) return;
-    panel.style.setProperty("--chat-h", Math.max(360, window.innerHeight - 72 - tb.offsetHeight - 14 - 14) + "px");
+    var card = panel.querySelector("[data-change]:not([hidden]) > .ccard"), pk = panel.querySelector(".pick"), cp = document.getElementById("composer");
+    /* never smaller than the card + a usable message box + the composer; on a short screen the page scrolls instead */
+    var need = (pk ? pk.offsetHeight : 0) + (card ? card.offsetHeight : 0) + 200 + (cp ? cp.offsetHeight : 0) + 40;
+    panel.style.setProperty("--chat-h", Math.max(360, need, window.innerHeight - 72 - tb.offsetHeight - 14 - 14) + "px");
   }
   window.addEventListener("resize", fitChat);
 
@@ -55,6 +58,7 @@ document.addEventListener("DOMContentLoaded", function () {
     var dbgBox = document.getElementById("cc-debug");
     if (dbgBox && dbgBox.checked !== (dbg === "1")) { dbgBox.checked = dbg === "1"; dbgBox.dispatchEvent(new Event("change")); }
     setHint();
+    fitChat();
     chatToEnd();
     form.classList.toggle("is-locked", !!lock);
     var note = document.getElementById("composer-locked");
