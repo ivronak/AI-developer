@@ -147,7 +147,6 @@ def save_details(project_id):
     p.name, p.client_name, p.host_type, p.tech_stack, p.github_repo = name, client, host, tech, repo or None
     p.is_active = f.get("active") == "1"
     p.monitor_enabled = f.get("watch") == "1"
-    p.test_command = (f.get("test_command") or "").strip()[:255]
     server = (f.get("server") or "").strip()[:190] or None
     for kind, url, branch in (("live", live_url, "main"), ("beta", beta_url, "beta")):
         e = p.env(kind)

@@ -505,8 +505,6 @@
         <div class="field"><label for="d-repo">GitHub repo</label><input id="d-repo" name="repo" class="mono" value="{{ p.github_repo or '' }}" placeholder="owner/repo"></div>
         <div class="field"><label for="d-tech">Tech (comma separated)</label><input id="d-tech" name="tech" value="{{ p.tech_stack|join(', ') }}" placeholder="Laravel, Flutter"></div>
       </div>
-      <div class="field"><label for="d-tests">Test command</label><input id="d-tests" name="test_command" class="mono" value="{{ p.test_command }}" placeholder="php artisan test   ·   pytest -q   ·   flutter test">
-        <span class="hint">How Claude runs this project's automated tests (from the repo's top folder). Leave empty if the project has no tests yet.</span></div>
       <label class="check"><input type="checkbox" name="active" value="1"{% if p.is_active %} checked{% endif %}> <span>Active project (untick for a dormant one)</span></label>
       <label class="check"><input type="checkbox" name="watch" value="1"{% if p.monitor_enabled %} checked{% endif %}> <span>Watch this site — check the live address every 5 minutes and alert on Telegram if it goes down or the home page changes</span></label>
       <div><button class="btn btn-primary" type="submit">Save details</button></div>
