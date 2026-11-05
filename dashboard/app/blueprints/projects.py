@@ -385,6 +385,14 @@ def _cc_picker():
     return {"cc_accts": rows, "cc_list": cc_logins.models_for(dflt)}
 
 
+@bp.get("/claude-usage")
+@login_required
+def claude_usage():
+    from app import cc_logins
+    acc = cc_logins.pick(request.args.get("account", type=int))
+    return jsonify(cc_logins.usage(acc) if acc and acc.ready else None)
+
+
 @bp.get("/changes/<int:change_id>/status")
 @login_required
 def change_status(change_id):

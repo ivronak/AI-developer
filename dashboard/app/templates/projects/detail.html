@@ -356,10 +356,13 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="change_id" id="composer-change" value="{{ current.id if current else '' }}">
       <label for="msg" class="label" hidden>Message to Claude</label>
-      <textarea id="msg" name="message" required placeholder="{{ 'Tell Claude what to adjust…' if current else 'e.g. Client wants the logo bigger on the login page' }}"></textarea>
+      <textarea id="msg" name="message" rows="1" required placeholder="{{ 'Tell Claude what to adjust…' if current else 'e.g. Client wants the logo bigger on the login page' }}"></textarea>
       <ul class="shot-previews" id="shot-previews" aria-label="Screenshots to send" hidden></ul>
       <div class="composer-bar">
         <div class="chip-row">
+          <label class="plus-btn" for="shots" title="Add screenshots — pick image files, paste a copied image (Ctrl+V) or drop image files on this page" aria-label="Add screenshots">+</label>
+          <input id="shots" name="shots" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+          <span class="hint" id="shot-names"></span>
           <label class="label" for="chat-engine" hidden>Claude engine</label>
           <select id="chat-engine" name="engine" class="preset-pick" title="Claude Code on the server remembers earlier work; Claude API is a fresh run each time">
             <option value="claude_code" selected>Claude Code</option>
@@ -374,6 +377,7 @@
           <select id="cc-account" name="account" class="preset-pick" title="Which Claude account works on this">
             {% for row in cc_accts %}<option value="{{ row.a.id }}"{% if row.default %} selected{% endif %}{% if row.a.status == "logged_out" %} disabled{% endif %}>{{ row.a.name }}{% if row.a.status == "logged_out" %} · logged out{% endif %}</option>{% endfor %}
           </select>
+          <span id="cc-usage" class="cc-usage" data-url="{{ url_for('projects.claude_usage') }}" title="This Claude account's plan usage (same numbers as /usage in Claude Code)" hidden></span>
           {% for row in cc_accts %}<template id="cc-models-{{ row.a.id }}">{% for m in row.models %}<option value="{{ m.value }}" data-efforts="{{ m.supportedEffortLevels|join(',') }}">{{ m.displayName }}{% if m.description %} — {{ m.description }}{% endif %}{% if m.value in cc_credit_models %} · needs extra usage credits{% endif %}</option>{% endfor %}</template>{% endfor %}
           {% endif %}
           <label class="label" for="cc-model" hidden>Model</label>
@@ -396,9 +400,6 @@
           <span data-engine-only="claude_code" style="display:contents">
           <label class="check debug-pick" title="For a bug: Sonnet 5.5, high effort, up to 120 steps (or the cost limit in Settings). Claude reproduces the problem first, finds the cause from evidence, then fixes and checks it."><input type="checkbox" name="debug" value="1" id="cc-debug"> <span>Debug mode</span></label>
           </span>
-          <label class="btn btn-sm" for="shots" title="Pick image files — or paste a copied image (Ctrl+V) or drop image files on this page">{{ icon('clip') }}Screenshot</label>
-          <input id="shots" name="shots" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
-          <span class="hint" id="shot-names"></span>
         </div>
         <button class="btn btn-primary btn-sm" type="submit" id="composer-send">{{ icon('send') }}<span id="send-label">{{ "Send" if current else "Start change" }}</span></button>
       </div>

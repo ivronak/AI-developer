@@ -378,6 +378,30 @@ def access_token(acc):
     return token
 
 
+_usage_cache = {}
+
+
+def usage(acc):
+    """The account's plan usage, as Claude Code's /usage shows it: {session, session_resets, week, week_resets} (percent used,
+    ISO reset times) or None when it can't be read. Asked at most once a minute per account."""
+    import urllib.request
+    hit = _usage_cache.get(acc.id)
+    if hit and time.time() - hit[0] < 60:
+        return hit[1]
+    out = None
+    try:
+        req = urllib.request.Request("https://api.anthropic.com/api/oauth/usage", headers={
+            "Authorization": "Bearer " + access_token(acc), "anthropic-beta": "oauth-2025-04-20", "User-Agent": "claude-code/2.0"})
+        d = json.loads(urllib.request.urlopen(req, timeout=15).read().decode())
+        five, week = d.get("five_hour") or {}, d.get("seven_day") or {}
+        out = {"session": five.get("utilization"), "session_resets": five.get("resets_at"),
+               "week": week.get("utilization"), "week_resets": week.get("resets_at")}
+    except Exception as e:                    # no token, offline, endpoint changed — the chip just stays hidden
+        current_app.logger.info("claude usage not read for %s: %s", acc.name, e.__class__.__name__)
+    _usage_cache[acc.id] = (time.time(), out)
+    return out
+
+
 def tick():
     """Every 5 minutes (flask monitor): check accounts not checked for an hour, renew a token that ran out, alert once
     when an account is logged out. Never raises."""

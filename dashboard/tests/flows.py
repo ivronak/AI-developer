@@ -969,6 +969,13 @@ with app.app_context():
     chat = c.get(f"/projects/{newp.id}").data.decode()
     ok('id="cc-account"' in chat and f'id="cc-models-{acc2.id}"' in chat and "Fable 5.1" in chat and "Office Max" in chat,
        "the chat offers every Claude account, each with its own models")
+    ok('id="cc-usage"' in chat, "the chat has the Claude plan-usage chip")
+    import app.cc_logins as _ccl
+    _ccl._usage_cache[acc1.id] = (__import__("time").time(), {"session": 42.0, "session_resets": None, "week": 7.0, "week_resets": None})
+    acc1.status = "ok"; db.session.commit()
+    uj = c.get(f"/claude-usage?account={acc1.id}").get_json()
+    ok(uj and uj["session"] == 42.0 and uj["week"] == 7.0, "the usage route returns the account's session and week percent")
+    _ccl._usage_cache.clear()
     u = AiUsage.query.filter_by(change_id=cc1.id).order_by(AiUsage.id.desc()).first()
     ok(u.model == "claude-code:sonnet" and float(u.cost_usd) == 0, "a subscription run costs nothing per call on the AI cost page")
     ok("<strong>added</strong>" in c.get(f"/projects/{newp.id}?change={cc1.id}").data.decode(), "Claude Code's note shows in the chat")

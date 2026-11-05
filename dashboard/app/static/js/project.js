@@ -43,6 +43,19 @@ document.addEventListener("DOMContentLoaded", function () {
     document.getElementById("composer-send").disabled = !!lock;
   }
 
+  /* the message box grows with the text; Enter sends, Shift+Enter is a new line */
+  var msgEl = document.getElementById("msg");
+  if (msgEl) {
+    var grow = function () { msgEl.style.height = "auto"; msgEl.style.height = Math.min(msgEl.scrollHeight, window.innerHeight * 0.4) + "px"; };
+    msgEl.addEventListener("input", grow);
+    msgEl.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
+      e.preventDefault();
+      var f = document.getElementById("composer"), b = document.getElementById("composer-send");
+      if (f && b && !b.disabled && msgEl.value.trim()) f.requestSubmit(b);
+    });
+  }
+
   document.addEventListener("click", function (e) {
     var t = e.target.closest("[data-tab]");
     if (t) { setTab(t.getAttribute("data-tab")); return; }
@@ -254,7 +267,25 @@ document.addEventListener("DOMContentLoaded", function () {
     fillEffort();
     /* the Claude account picked: its own model list (kept on the same model when that account has it too) */
     var ccAccount = document.getElementById("cc-account");
+    var usageEl = document.getElementById("cc-usage");
+    var showUsage = function () {
+      if (!usageEl || !ccAccount) return;
+      fetch(usageEl.getAttribute("data-url") + "?account=" + encodeURIComponent(ccAccount.value), { credentials: "same-origin" })
+        .then(function (r) { return r.json(); }).then(function (u) {
+          if (!u || u.session == null) { usageEl.hidden = true; return; }
+          var left = function (iso) {
+            if (!iso) return "";
+            var m = Math.round((new Date(iso) - new Date()) / 60000);
+            if (m <= 0) return "";
+            return " (resets in " + (m >= 1440 ? Math.floor(m / 1440) + " d " + Math.floor(m % 1440 / 60) + " h" : m >= 60 ? Math.floor(m / 60) + " h " + m % 60 + " min" : m + " min") + ")";
+          };
+          usageEl.textContent = "Session " + Math.round(u.session) + "%" + left(u.session_resets) + " · Week " + Math.round(u.week || 0) + "%" + left(u.week_resets);
+          usageEl.hidden = false;
+        }).catch(function () { usageEl.hidden = true; });
+    };
     if (ccAccount) {
+      showUsage();
+      ccAccount.addEventListener("change", showUsage);
       ccAccount.addEventListener("change", function () {
         var tpl = document.getElementById("cc-models-" + ccAccount.value);
         if (!tpl) return;

@@ -222,7 +222,17 @@
 .ask-root .hint { margin: 0; }
 .ask-code-full { max-height: none; }
 /* chat screenshots: previews, and the drop overlay while image files are dragged over the page */
-.composer { position: relative; }
+.composer { position: sticky; bottom: 12px; z-index: 20; box-shadow: 0 0 0 12px var(--bg), 0 -6px 18px 12px var(--bg); }
+.composer { border-radius: 22px; padding: 10px 12px 8px; background: var(--surface-2, var(--surface)); }
+.composer textarea { resize: none; min-height: 44px; max-height: 40vh; padding: 8px 6px; line-height: 1.45; }
+.composer .composer-bar { flex-wrap: nowrap; align-items: flex-end; }
+.composer .chip-row { flex: 1; min-width: 0; align-items: center; }
+.composer .preset-pick { border-color: transparent; background: transparent; color: var(--muted); height: 28px; padding: 0 4px; }
+.composer .preset-pick:hover, .composer .preset-pick:focus-visible { background: var(--surface); color: inherit; }
+.composer #composer-send { border-radius: 999px; padding: 0 14px; height: 34px; flex: none; }
+.plus-btn { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--line-strong, var(--line));
+  font-size: 22px; line-height: 1; cursor: pointer; color: var(--muted); user-select: none; }
+.plus-btn:hover { color: inherit; background: var(--surface); }
 .composer.is-drag { box-shadow: var(--focus); }
 .drop-hint { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; text-align: center; padding: 12px;
   border: 2px dashed var(--line-strong); border-radius: inherit; background: var(--surface-2); font-weight: 600; pointer-events: none; opacity: .96; }
@@ -254,3 +264,5 @@
 .cancel-box { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
 .cancel-box summary { cursor: pointer; width: fit-content; }
 .cancel-box[open] summary { margin-bottom: 8px; }
+
+.cc-usage { font-size: .8rem; color: var(--muted, #667); white-space: nowrap; align-self: center; }
