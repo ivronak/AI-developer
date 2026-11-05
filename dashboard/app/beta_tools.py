@@ -313,6 +313,22 @@ def t_read_file(job, args):
     return _redact(out) if code == 0 else f"Could not read {path}: {out[-300:]}"
 
 
+HTTPS_MARK = "AIDASH-HTTPS"
+HTTPS_RULES = (f"# {HTTPS_MARK}: beta is https only (AI Project Dashboard)\n"
+               "RewriteCond %{HTTPS} !=on\nRewriteCond %{HTTP:X-Forwarded-Proto} !https\n"
+               "RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]\n")
+
+
+def https_first(content):
+    """The beta's .htaccess always sends http:// to https:// first (added after RewriteEngine On; added if missing)."""
+    if HTTPS_MARK in content:
+        return content
+    m = re.search(r"^[ \t]*RewriteEngine[ \t]+On[ \t]*\r?\n", content, re.M | re.I)
+    if m:
+        return content[:m.end()] + HTTPS_RULES + content[m.end():]
+    return "RewriteEngine On\n" + HTTPS_RULES + content
+
+
 def t_write_file(job, args):
     p, live, beta, n = _ctx(job)
     beta = _beta_ready(beta)
@@ -326,9 +342,22 @@ def t_write_file(job, args):
         path = f"/home/{n['host']}/public_html/{path}"
     if len(content) > MAX_FILE:
         raise ToolError("File too big for write_file.")
+    routing = web and path.endswith("/public_html/.htaccess")
+    if routing:
+        content = https_first(content)
     tag = "AIDASH_" + secrets.token_hex(6)
     code, out = _as_site(beta, f"mkdir -p \"$(dirname -- {_q(path)})\"\ncat > {_q(path)} <<'{tag}'\n{content}\n{tag}\n")
-    return f"Wrote {path} ({len(content)} characters)." if code == 0 else f"Could not write {path}: {out[-300:]}"
+    if code != 0:
+        return f"Could not write {path}: {out[-300:]}"
+    if routing:
+        # OpenLiteSpeed caches "no .htaccess" per folder: without a graceful restart the new routing is ignored (404 / no CSS)
+        try:
+            betas.restart_web(beta.server, job, "writing the beta's routing (.htaccess)")
+        except DeployError as e:
+            return f"Wrote {path}, but: {e.plain}"
+        return (f"Wrote {path} ({len(content)} characters); the web server was restarted gracefully so it is used now. "
+                "http:// is redirected to https:// automatically.")
+    return f"Wrote {path} ({len(content)} characters)."
 
 
 def t_publish(job, args):

@@ -1617,6 +1617,15 @@ with app.app_context():
     ok(not err and newp.env("beta").deploy_path == f"/home/{n['host']}/app", "put_code place=app keeps the code outside the web root")
     txt, err = bt.call(j, "write_file", {"path": "web:.htaccess", "content": "RewriteEngine On"})
     ok(not err and any(f"/home/{n['host']}/public_html/.htaccess" in sc for sc in setup_scripts), "write_file web: writes into the web root")
+    ok("restarted gracefully" in txt and any("lswsctrl restart" in sc for sc in setup_scripts),
+       "writing the web routing restarts the web server gracefully so it is used at once")
+    ok(any("RewriteCond %{HTTPS} !=on" in sc and "AIDASH-HTTPS" in sc for sc in setup_scripts), "the beta's .htaccess redirects http:// to https://")
+    ok(bt.https_first("x\nRewriteEngine On\nRewriteRule a b\n").index("AIDASH-HTTPS") < bt.https_first("x\nRewriteEngine On\nRewriteRule a b\n").index("RewriteRule a b")
+       and bt.https_first("RewriteRule a b").startswith("RewriteEngine On") and bt.https_first(bt.https_first("RewriteEngine On")).count("AIDASH-HTTPS") == 2 - 1,
+       "https rule goes right after RewriteEngine On, is added once and the engine line is added if missing")
+    setup_scripts.clear()
+    txt, err = bt.call(j, "write_file", {"path": "notes.txt", "content": "hello"})
+    ok(not any("lswsctrl restart" in sc for sc in setup_scripts), "other files don't restart the web server")
     txt, err = bt.call(j, "publish", {"folder": "web/dist"})
     pub = next(sc for sc in setup_scripts if "rsync -a --delete --exclude=/.htaccess" in sc)
     ok(not err and f"/home/{n['host']}/app/web/dist" in pub and f"/home/{n['host']}/public_html" in pub, "publish copies the built folder into the web root")
