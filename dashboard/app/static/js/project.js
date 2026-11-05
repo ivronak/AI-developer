@@ -12,7 +12,7 @@ document.addEventListener("DOMContentLoaded", function () {
   window.addEventListener("resize", fitChat);
 
   function chatToEnd() {
-    var sc = document.getElementById("chat-scroll");
+    var sc = document.querySelector("[data-change]:not([hidden]) .thread-box");
     if (sc) sc.scrollTop = sc.scrollHeight;
   }
 

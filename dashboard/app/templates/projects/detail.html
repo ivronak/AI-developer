@@ -341,14 +341,14 @@
               <time>{{ m.created_at|ago }}</time>
             </div>
         {% endmacro %}
-        <div class="thread">
+        <div class="thread-box" tabindex="-1"><div class="thread">
           {% set msgs = c.messages %}
           {% if msgs|length > 6 %}
             <details class="older"><summary>Show {{ msgs|length - 6 }} earlier message{{ "s" if msgs|length - 6 != 1 }}</summary>
               <div class="thread">{% for m in msgs[:-6] %}{{ bubble(m) }}{% endfor %}</div></details>
           {% endif %}
           {% for m in msgs[-6:] %}{{ bubble(m) }}{% endfor %}
-        </div>
+        </div></div>
       </div>
     {% endfor %}
 

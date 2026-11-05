@@ -435,3 +435,4 @@ Big picture lives in `TRACKER.md` (status, decisions) and `CHANGES.md` (the "zer
 - 2026-11-05 · Chat composer: one compact model+effort popover (names only, ✓, effort pills), usage chip right-aligned, shorter labels · 461 checks · no migration · UI not opened in a browser.
 - 2026-11-05 · Chat tab is a fixed-height pane: messages scroll inside .chat-scroll, composer stays at the bottom (detail.html, project.css, project.js) · 461 checks · no migration · UI not opened in a browser.
 - 2026-11-05 · Chat pane height fix (project.js fitChat, --chat-h) so the message box is never below the screen · 461 checks · UI still not opened in a browser.
+- 2026-11-05 · Chat: change card separate on top, bordered .thread-box scrolls, composer fixed under it (detail.html, project.css, project.js) · 461 checks · not opened in a browser.
