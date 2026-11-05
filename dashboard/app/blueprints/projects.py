@@ -287,6 +287,8 @@ def chat(project_id):
         path.write_bytes(data)
         db.session.add(ChangeAttachment(message_id=msg.id, kind="image", file_path=str(path), original_name=name))
     from app.ai_models import PRESETS
+    if request.form.get("engine") in ("api", "claude_code"):      # picked in the chat (default Claude Code)
+        p.ai_engine = request.form["engine"]
     pick = request.form.get("preset")
     c.agent_preset = pick if pick in PRESETS else (get_setting("claude_preset") or "normal")
     if p.ai_engine == "claude_code":     # model + effort from Claude Code's own list; (None, None) = no list → the preset stays

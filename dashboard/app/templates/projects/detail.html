@@ -338,7 +338,13 @@
       <ul class="shot-previews" id="shot-previews" aria-label="Screenshots to send" hidden></ul>
       <div class="composer-bar">
         <div class="chip-row">
-          {% if p.ai_engine == "claude_code" and cc_list %}
+          <label class="label" for="chat-engine" hidden>Claude engine</label>
+          <select id="chat-engine" name="engine" class="preset-pick" title="Claude Code on the server remembers earlier work; Claude API is a fresh run each time">
+            <option value="claude_code" selected>Claude Code</option>
+            <option value="api">Claude API</option>
+          </select>
+          {% if cc_list %}
+          <span data-engine-only="claude_code" style="display:contents">
           {# the Claude account (each signed in through the web), then that account's own model list, then the effort levels #}
           {% set cc_pick = cc_list|selectattr("value", "equalto", cc_default[0])|first or cc_list[0] %}
           {% if cc_accts %}
@@ -357,15 +363,17 @@
             <option value="">{{ "Effort: default" if cc_pick.supportedEffortLevels else "Effort: not available" }}</option>
             {% for lv in cc_pick.supportedEffortLevels %}<option value="{{ lv }}"{% if lv == cc_default[1] %} selected{% endif %}>Effort: {{ lv }}</option>{% endfor %}
           </select>
-          {% else %}
+          </span>
+          {% endif %}
+          <span data-engine-only="{{ 'api' if cc_list else 'any' }}" style="display:contents">
           <label class="label" for="preset" hidden>How much care</label>
           <select id="preset" name="preset" class="preset-pick" title="Cheaper or more careful">
             {% for key, pr in PRESETS.items() %}<option value="{{ key }}"{% if key == default_preset %} selected{% endif %}>{{ pr[0] }} — {{ pr[1] }}</option>{% endfor %}
           </select>
-          {% endif %}
-          {% if p.ai_engine == "claude_code" %}
+          </span>
+          <span data-engine-only="claude_code" style="display:contents">
           <label class="check debug-pick" title="For a bug: Sonnet 5.5, high effort, up to 120 steps (or the cost limit in Settings). Claude reproduces the problem first, finds the cause from evidence, then fixes and checks it."><input type="checkbox" name="debug" value="1" id="cc-debug"> <span>Debug mode</span></label>
-          {% endif %}
+          </span>
           <label class="btn btn-sm" for="shots" title="Pick image files — or paste a copied image (Ctrl+V) or drop image files on this page">{{ icon('clip') }}Screenshot</label>
           <input id="shots" name="shots" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
           <span class="hint" id="shot-names"></span>

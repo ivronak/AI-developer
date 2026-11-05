@@ -965,6 +965,9 @@ with app.app_context():
     c.post(f"/projects/{newp.id}/engine", data={"engine": "api"})
     db.session.refresh(newp)
     ok(newp.ai_engine == "api", "owner can switch back to the Claude API")
+    pg = c.get(f"/projects/{newp.id}").data
+    ok(b'id="ai-engine"' not in pg and b'name="engine"' in pg and b'<option value="claude_code" selected>' in pg,
+       "engine is picked in the chat (Claude Code by default), no AI engine section in Settings")
 
     # ---------- client approval link (Step 9) ----------
     from app.models import Approval

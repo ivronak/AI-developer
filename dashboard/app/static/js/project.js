@@ -269,6 +269,20 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
+  /* the engine picked in the chat decides which pickers show */
+  var engineSel = document.getElementById("chat-engine");
+  if (engineSel) {
+    var showEngine = function () {
+      var boxes = document.querySelectorAll("[data-engine-only]");
+      for (var i = 0; i < boxes.length; i++) {
+        var only = boxes[i].getAttribute("data-engine-only");
+        boxes[i].style.display = (only === "any" || only === engineSel.value) ? "contents" : "none";
+      }
+    };
+    engineSel.addEventListener("change", showEngine);
+    showEngine();
+  }
+
   /* Debug mode: Sonnet 5.5 + high effort (still changeable) and a hint on what to write */
   var ccDebug = document.getElementById("cc-debug"), msgBox = document.getElementById("msg");
   if (ccDebug && msgBox) {
