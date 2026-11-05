@@ -232,6 +232,15 @@
             {% endfor %}
           </ol>
           {% if c.tests_total is not none %}<p class="tests {{ 'tests-ok' if c.tests_ok else 'tests-bad' }}">Tests: {{ c.tests_passed }} / {{ c.tests_total }} passed</p>{% endif %}
+          {% if owner and c.agent_state not in ("queued", "working") %}
+            <details class="cancel-box"><summary>Don't need this change any more?</summary>
+              <form method="post" action="{{ url_for('projects.cancel_change', project_id=p.id, change_id=c.id) }}" class="chip-row">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <span class="hint">It will never go live and leaves beta at the next Beta deploy. The chat and branch are kept; you can reopen it later.</span>
+                <button class="btn btn-sm" type="submit">Yes, cancel this change</button>
+              </form>
+            </details>
+          {% endif %}
           {% if beta and c.status in ("passed", "client", "changes", "approved") and c.agent_state not in ("queued", "working") %}
             {% if on_beta(c) %}<p class="hint">{{ icon('check') }} This version is on the beta site.</p>
             {% elif not running_job or running_job.kind != "beta_deploy" %}<p class="client-said"><strong>Not on the beta site yet.</strong> Press <strong>Beta deploy</strong> above to put it there.</p>{% endif %}
@@ -402,11 +411,19 @@
     {% if changes %}
       <div class="rows">
         {% for c in changes %}{% set si = status_info(c) %}
+          {% if c.status == "cancelled" %}
+          <div class="row">
+            <span class="row-lead"><span class="row-ic" style="--h:220">{{ icon('activity') }}</span>
+              <span class="row-main"><span class="row-title">{{ c.title }}</span><span class="row-sub">#{{ c.id }} · {{ c.requested_by.name if c.requested_by else "—" }} · {{ c.created_at|ago }}</span></span></span>
+            <span class="row-side">{{ pill(c) }}{% if owner %}<form method="post" action="{{ url_for('projects.reopen_change', project_id=p.id, change_id=c.id) }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm" type="submit">Reopen</button></form>{% endif %}</span>
+          </div>
+          {% else %}
           <a class="row row-btn" href="{{ url_for('projects.detail', project_id=p.id, change=c.id) }}#chat">
             <span class="row-lead"><span class="row-ic" style="--h:{{ {'ok': 150, 'warn': 35, 'accent': 245}.get(si[1], 220) }}">{{ icon('activity') }}</span>
               <span class="row-main"><span class="row-title">{{ c.title }}</span><span class="row-sub">#{{ c.id }} · {{ c.requested_by.name if c.requested_by else "—" }} · {{ c.created_at|ago }}</span></span></span>
             <span class="row-side">{{ pill(c) }}</span>
           </a>
+          {% endif %}
         {% endfor %}
       </div>
     {% else %}<div class="empty">No changes yet. Start one from the Chat tab.</div>{% endif %}

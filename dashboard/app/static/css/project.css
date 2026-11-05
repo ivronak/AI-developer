@@ -250,3 +250,7 @@
 .setup-card .txt { flex: 1; min-width: 0; }
 .setup-card .txt small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
 @media (max-width: 560px) { .setup-card li { flex-wrap: wrap; } }
+
+.cancel-box { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+.cancel-box summary { cursor: pointer; width: fit-content; }
+.cancel-box[open] summary { margin-bottom: 8px; }

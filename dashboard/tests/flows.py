@@ -455,6 +455,33 @@ with app.app_context():
     _lv.server_id, _lv.deploy_path, _bt.server_id, _bt.deploy_path = _keep_env
     db.session.delete(s1)
     db.session.commit()
+
+    # cancel / reopen a change
+    from app.golive import SHIP_FROM
+    from app.deploy import ON_BETA
+    tmpc = Change(project_id=newp.id, title="Not wanted", requested_by_id=owner.id, status="passed", branch="change/tmp-cancel")
+    db.session.add(tmpc)
+    db.session.commit()
+    ok(dv.post(f"/projects/{newp.id}/changes/{tmpc.id}/cancel").status_code == 403, "a developer can't cancel a change")
+    tmpc.agent_state = "working"
+    db.session.commit()
+    c.post(f"/projects/{newp.id}/changes/{tmpc.id}/cancel")
+    db.session.refresh(tmpc)
+    ok(tmpc.status == "passed", "a change Claude is still working on can't be cancelled")
+    tmpc.agent_state = "idle"
+    db.session.commit()
+    ok(b"need this change any more?" in c.get(f"/projects/{newp.id}?change={tmpc.id}").data, "the change card offers Cancel")
+    r = c.post(f"/projects/{newp.id}/changes/{tmpc.id}/cancel", follow_redirects=True)
+    db.session.refresh(tmpc)
+    ok(tmpc.status == "cancelled" and b"cancelled" in r.data.lower() and "cancelled" not in SHIP_FROM + ON_BETA, "owner cancels a change: it can't go live or stay on beta")
+    ok(b"Reopen" in c.get(f"/projects/{newp.id}#changes").data, "cancelled change shows Reopen in the Changes tab")
+    c.post(f"/projects/{newp.id}/chat", data={"message": "more", "change_id": str(tmpc.id)})
+    ok(tmpc.status == "cancelled", "no chat on a cancelled change")
+    c.post(f"/projects/{newp.id}/changes/{tmpc.id}/reopen")
+    db.session.refresh(tmpc)
+    ok(tmpc.status == "passed", "reopen brings it back")
+    db.session.delete(tmpc)
+    db.session.commit()
     ch7 = Change.query.filter_by(project_id=newp.id).order_by(Change.id.desc()).first()
     db.session.refresh(ch7)
     ok(ch7.agent_state == "done" and ch7.status == "passed", "Claude finished and the tests passed")

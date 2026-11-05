@@ -429,3 +429,4 @@ Big picture lives in `TRACKER.md` (status, decisions) and `CHANGES.md` (the "zer
 - 2026-11-05 · Deploy-steps textarea removed from Servers & deploy (default template still used; stored deploy_script kept) · 443 checks · no migration.
 - 2026-11-05 · beta .htaccess write → graceful web-server restart + http→https rule (beta_tools.t_write_file, https_first) · 447 checks · no migration · next: re-test on a fresh beta.
 - 2026-11-05 · "Before changes" 3-step setup card + chat lock (projects.setup_steps, detail.html, project.css) · 452 checks · no migration · UI not opened in a browser yet.
+- 2026-11-05 · Cancel / Reopen change (projects.cancel_change, reopen_change, status cancelled) · 459 checks · no migration · next: owner tests on Eyenosis.

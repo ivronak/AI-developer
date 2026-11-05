@@ -56,7 +56,7 @@ def summary(p):
 
     return {
         "p": p, "level": level, "label": LABEL[level], "long_label": LONG_LABEL[level], "reason": reason,
-        "open": sum(1 for c in changes if c.status != "live"), "waiting": len(waiting),
+        "open": sum(1 for c in changes if c.status not in ("live", "cancelled")), "waiting": len(waiting),
         "last_deploy": ld, "last_backup": lb, "backup_stale": stale,
         "live": p.env("live"), "beta": p.env("beta"),
     }

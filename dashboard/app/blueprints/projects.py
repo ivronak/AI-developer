@@ -18,7 +18,7 @@ from app.models.setting import get_setting
 bp = Blueprint("projects", __name__)
 
 STEPS = [("beta", "In beta"), ("passed", "Tests passed"), ("client", "With client"), ("approved", "Approved"), ("live", "Live")]
-STEP_INDEX = {"beta": 0, "passed": 1, "client": 2, "changes": 2, "approved": 3, "live": 4}
+STEP_INDEX = {"cancelled": 0, "beta": 0, "passed": 1, "client": 2, "changes": 2, "approved": 3, "live": 4}
 
 
 def status_info(c):
@@ -26,7 +26,8 @@ def status_info(c):
     if c.status == "beta":
         return ("Tests failing", "warn") if c.tests_total is not None and not c.tests_ok else ("In beta", "accent")
     return {"passed": ("Tests passed", "ok"), "client": ("With client", "accent"),
-            "changes": ("Client asked for changes", "warn"), "approved": ("Approved", "ok")}.get(c.status, ("Live", ""))
+            "changes": ("Client asked for changes", "warn"), "approved": ("Approved", "ok"),
+            "cancelled": ("Cancelled", "")}.get(c.status, ("Live", ""))
 
 
 @bp.get("/projects/<int:project_id>")
@@ -35,7 +36,7 @@ def detail(project_id):
     p = project_or_404(project_id)
     r = health.summary(p)
     changes = Change.query.filter_by(project_id=p.id).order_by(Change.created_at.desc()).all()
-    open_changes = [c for c in changes if c.status != "live"]
+    open_changes = [c for c in changes if c.status not in ("live", "cancelled")]
     deploys = (Deployment.query.filter_by(project_id=p.id).order_by(Deployment.created_at.desc()).all())
     live_now = next((d for d in deploys if d.environment.kind == "live" and not d.rolled_back), None)
     backups = (Backup.query.filter_by(project_id=p.id).order_by(Backup.created_at.desc()).limit(24).all())
@@ -246,6 +247,45 @@ def setup_steps(p, running_job=None):
     return {"steps": steps, "locked": locked, "first": first, "done": sum(x["done"] for x in steps)}
 
 
+@bp.post("/projects/<int:project_id>/changes/<int:change_id>/cancel")
+@login_required
+@owner_required
+def cancel_change(project_id, change_id):
+    """Owner drops a change that is not wanted any more: it leaves beta (next Beta deploy) and can never go live. Branch and chat stay."""
+    p = project_or_404(project_id)
+    c = db.session.get(Change, change_id)
+    if c is None or c.project_id != p.id:
+        abort(404)
+    if c.status == "live":
+        flash("This change is already live — use Rollback to undo it.", "bad")
+    elif c.status == "cancelled":
+        flash("This change is already cancelled.", "bad")
+    elif c.agent_state in ("queued", "working"):
+        flash("Claude is still working on this change — wait for it to finish, then cancel.", "bad")
+    else:
+        c.status = "cancelled"
+        log("Change cancelled", project_id=p.id, details=f"#{c.id} {c.title[:80]}")
+        db.session.commit()
+        flash(f"Change #{c.id} cancelled. It will not go live. Beta drops it at the next Beta deploy.", "ok")
+    return redirect(url_for("projects.detail", project_id=p.id) + "#changes")
+
+
+@bp.post("/projects/<int:project_id>/changes/<int:change_id>/reopen")
+@login_required
+@owner_required
+def reopen_change(project_id, change_id):
+    p = project_or_404(project_id)
+    c = db.session.get(Change, change_id)
+    if c is None or c.project_id != p.id:
+        abort(404)
+    if c.status == "cancelled":
+        c.status = "beta" if c.tests_total is not None and not c.tests_ok else "passed"
+        log("Change reopened", project_id=p.id, details=f"#{c.id} {c.title[:80]}")
+        db.session.commit()
+        flash(f"Change #{c.id} is back. Press Beta deploy to see it on beta again.", "ok")
+    return redirect(url_for("projects.detail", project_id=p.id, change=c.id) + "#chat")
+
+
 @bp.post("/projects/<int:project_id>/chat")
 @login_required
 def chat(project_id):
@@ -277,6 +317,9 @@ def chat(project_id):
         c = db.session.get(Change, cid)
         if c is None or c.project_id != p.id:
             abort(404)
+        if c.status == "cancelled":
+            flash("This change was cancelled. Reopen it from the Changes tab, or start a new change.", "bad")
+            return redirect(url_for("projects.detail", project_id=p.id) + "#chat")
         if c.status in ("approved", "live"):
             flash("This change is approved or live. Start a new change for anything else.", "bad")
             return redirect(url_for("projects.detail", project_id=p.id, change=c.id) + "#chat")
