@@ -3,6 +3,14 @@
 document.addEventListener("DOMContentLoaded", function () {
   var TABS = ["chat", "changes", "apps", "deploys", "backups", "settings"];
 
+  /* the chat pane fills exactly what is left of the screen under the tab bar (header 72px kept clear) */
+  function fitChat() {
+    var panel = document.querySelector(".chat-panel"), tb = document.getElementById("tabs");
+    if (!panel || !tb || panel.hidden) return;
+    panel.style.setProperty("--chat-h", Math.max(360, window.innerHeight - 72 - tb.offsetHeight - 14 - 14) + "px");
+  }
+  window.addEventListener("resize", fitChat);
+
   function chatToEnd() {
     var sc = document.getElementById("chat-scroll");
     if (sc) sc.scrollTop = sc.scrollHeight;
@@ -16,6 +24,7 @@ document.addEventListener("DOMContentLoaded", function () {
     for (var j = 0; j < p.length; j++) p[j].hidden = p[j].getAttribute("data-panel") !== t;
     try { history.replaceState(null, "", window.location.pathname + window.location.search + "#" + t); } catch (e) {}
     if (t === "chat") {
+      fitChat();
       chatToEnd();
       if (jump) { var tb = document.getElementById("tabs"); if (tb) tb.scrollIntoView({ block: "start" }); }
     }

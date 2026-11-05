@@ -201,3 +201,4 @@ Everything decided after the PRD that changes what it says. The PRD stays the ba
 - 2026-11-05 · Chat: Claude plan-usage chip (cc_logins.usage, /claude-usage), composer restyled (sticky at the bottom, round + button, auto-grow, Enter sends) · 461 checks · no migration · UI not opened in a browser.
 - 2026-11-05 · Composer controls compacted: model/effort popover (detail.html, project.js, project.css) · 461 checks · no migration.
 - 2026-11-05 · Chat scroll pane + fixed composer · 461 checks · no migration.
+- 2026-11-05 · Chat pane height fixed: fitChat() in project.js sizes it to the screen under the tab bar (message box was cut off) · 461 checks · no migration.

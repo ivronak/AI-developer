@@ -434,3 +434,4 @@ Big picture lives in `TRACKER.md` (status, decisions) and `CHANGES.md` (the "zer
 - 2026-11-05 · Chat: plan-usage chip next to the Claude account (cc_logins.usage via oauth/usage, 60 s cache) + sticky, compact composer (+ button, auto-grow, Enter sends) · 461 checks · no migration · next: owner checks the look.
 - 2026-11-05 · Chat composer: one compact model+effort popover (names only, ✓, effort pills), usage chip right-aligned, shorter labels · 461 checks · no migration · UI not opened in a browser.
 - 2026-11-05 · Chat tab is a fixed-height pane: messages scroll inside .chat-scroll, composer stays at the bottom (detail.html, project.css, project.js) · 461 checks · no migration · UI not opened in a browser.
+- 2026-11-05 · Chat pane height fix (project.js fitChat, --chat-h) so the message box is never below the screen · 461 checks · UI still not opened in a browser.
