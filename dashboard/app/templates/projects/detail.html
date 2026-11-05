@@ -76,9 +76,36 @@
     {% endif %}
   </section>
 
+  {% if live and live.server and live.deploy_path and live.layout != "releases" %}
+  {% set dr = live.drift or {} %}{% set mine = dr.get("files", []) + dr.get("new", []) %}
+  <section class="panel-box live-drift" id="live-drift">
+    {% if not dr %}
+      <p class="hint">Live has not been compared with {{ p.default_branch or "main" }} yet.</p>
+    {% elif not dr.fetch_ok %}
+      <p class="msg msg-warn">The live server could not reach GitHub, so it could not be compared with {{ p.default_branch or "main" }}.</p>
+    {% elif mine or dr.ahead %}
+      <p class="msg msg-warn"><strong>Live differs from {{ p.default_branch or "main" }}.</strong>
+        {% if mine %}{{ mine|length }} file{{ "s" if mine|length != 1 }} changed on the live server (not committed){% endif %}{% if mine and dr.ahead %} · {% endif %}{% if dr.ahead %}{{ dr.ahead }} commit{{ "s" if dr.ahead != 1 }} not on GitHub{% endif %}.
+        {% if dr.behind %}{{ p.default_branch or "main" }} also has {{ dr.behind }} newer commit{{ "s" if dr.behind != 1 }}.{% endif %}</p>
+      {% if mine %}<details><summary>Show files</summary><ul class="summary-list mono">{% for f in mine[:50] %}<li>{{ f }}</li>{% endfor %}{% if mine|length > 50 %}<li>… {{ mine|length - 50 }} more</li>{% endif %}</ul></details>{% endif %}
+    {% elif dr.behind %}
+      <p class="msg"><strong>{{ p.default_branch or "main" }} has {{ dr.behind }} newer commit{{ "s" if dr.behind != 1 }} that live does not have yet.</strong></p>
+    {% else %}
+      <p class="hint">{{ icon('check') }} Live has the same code as {{ p.default_branch or "main" }}{% if live.drift_at %} · looked {{ live.drift_at|ago }}{% endif %}.</p>
+    {% endif %}
+    {% if owner %}
+    <div class="row-actions">
+      <form method="post" action="{{ url_for('projects.live_check', project_id=p.id) }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn" type="submit">Check live now</button></form>
+      {% if dr and dr.fetch_ok and (mine or dr.ahead) %}<button class="btn btn-primary" type="button" data-open="dlg-livepush">{{ icon('upload') }}Commit &amp; push to GitHub</button>{% endif %}
+      {% if dr and dr.fetch_ok and not (mine or dr.ahead) %}<button class="btn" type="button" data-open="dlg-liveupdate" {% if not dr.behind %}disabled title="Live already has everything {{ p.default_branch or 'main' }} has"{% endif %}>{{ icon('rocket') }}Update live from {{ p.default_branch or "main" }}</button>{% endif %}
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
+
   {% if running_job %}
     <div class="agent-run" data-job-poll="{{ url_for('projects.job_status', job_id=running_job.id) }}">
-      <span class="spin" aria-hidden="true"></span><span><strong>{{ {"beta_deploy": "Beta deploy", "sync": "Live → Beta sync", "go_live": "Go Live", "rollback": "Rollback", "beta_setup": "Automatic beta setup", "beta_lock": "Beta password", "live_convert": "Switch to release folders", "live_steps": "Claude writes the live steps", "beta_api": "Opening the beta API for the apps", "change_debug": "Claude checks the beta"}.get(running_job.kind, running_job.kind) }} running</strong> · <span data-note>{{ running_job.note }}</span><small>Started by {{ running_job.by_user.name if running_job.by_user else "System" }} — this page updates by itself.</small></span>
+      <span class="spin" aria-hidden="true"></span><span><strong>{{ {"beta_deploy": "Beta deploy", "sync": "Live → Beta sync", "go_live": "Go Live", "rollback": "Rollback", "beta_setup": "Automatic beta setup", "beta_lock": "Beta password", "live_push": "Commit & push of the live folder", "live_update": "Updating live from main", "beta_api": "Opening the beta API for the apps", "change_debug": "Claude checks the beta"}.get(running_job.kind, running_job.kind) }} running</strong> · <span data-note>{{ running_job.note }}</span><small>Started by {{ running_job.by_user.name if running_job.by_user else "System" }} — this page updates by itself.</small></span>
     </div>
   {% endif %}
 
@@ -103,6 +130,30 @@
         <div class="field"><label for="gl-code">Authenticator code</label><input id="gl-code" name="code" inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" required placeholder="6 digits from your phone" class="mono otp-in"></div>
       </div>
       <div class="dlg-foot"><button type="button" class="btn" data-close>Cancel</button><button class="btn btn-primary" type="submit">{{ icon('rocket') }}Go Live</button></div>
+    </form>
+  </dialog>
+  <dialog class="dlg" id="dlg-livepush">
+    <form method="post" action="{{ url_for('projects.live_push', project_id=p.id) }}" autocomplete="off">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="dlg-head"><h2>Commit &amp; push · {{ p.name }}</h2><button type="button" class="icon-btn" data-close aria-label="Close">{{ icon('x') }}</button></div>
+      <div class="dlg-body">
+        <p>The code on the live server is committed and pushed to GitHub {{ p.default_branch or "main" }}. Nothing on live changes, and nothing is overwritten on GitHub.
+          If {{ p.default_branch or "main" }} moved too, the two are merged here — a conflict stops and nothing is lost.</p>
+        <p class="hint">Secret files (.env, keys, database files) are never committed — if one is in the list the push stops.</p>
+        <div class="field"><label for="lp-code">Authenticator code</label><input id="lp-code" name="code" inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" required placeholder="6 digits from your phone" class="mono otp-in"></div>
+      </div>
+      <div class="dlg-foot"><button type="button" class="btn" data-close>Cancel</button><button class="btn btn-primary" type="submit">{{ icon('upload') }}Commit &amp; push</button></div>
+    </form>
+  </dialog>
+  <dialog class="dlg" id="dlg-liveupdate">
+    <form method="post" action="{{ url_for('projects.live_update', project_id=p.id) }}" autocomplete="off">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="dlg-head"><h2>Update live · {{ p.name }}</h2><button type="button" class="icon-btn" data-close aria-label="Close">{{ icon('x') }}</button></div>
+      <div class="dlg-body">
+        <p>Live takes the newer code from {{ p.default_branch or "main" }} (a snapshot of the live database is taken first, the site is checked after). Rollback is available.</p>
+        <div class="field"><label for="lu-code">Authenticator code</label><input id="lu-code" name="code" inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" required placeholder="6 digits from your phone" class="mono otp-in"></div>
+      </div>
+      <div class="dlg-foot"><button type="button" class="btn" data-close>Cancel</button><button class="btn btn-primary" type="submit">{{ icon('rocket') }}Update live</button></div>
     </form>
   </dialog>
   {% if rb_cur %}
@@ -391,7 +442,7 @@
     {% if recent_jobs %}
       <h3 class="sub-head">Recent runs</h3>
       <div class="rows">
-        {% for j in recent_jobs %}{% set jl = {"beta_deploy": ("Beta deploy", "upload", 215), "sync": ("Live → Beta sync", "sync", 199), "go_live": ("Go Live", "rocket", 150), "rollback": ("Rollback", "undo", 24), "beta_setup": ("Automatic beta setup", "sync", 285), "beta_lock": ("Beta password", "check", 150), "live_convert": ("Release folders", "rocket", 150), "live_steps": ("Live steps by Claude", "activity", 285), "beta_api": ("Beta API for apps", "upload", 285)}.get(j.kind, (j.kind, "activity", 245)) %}
+        {% for j in recent_jobs %}{% set jl = {"beta_deploy": ("Beta deploy", "upload", 215), "sync": ("Live → Beta sync", "sync", 199), "go_live": ("Go Live", "rocket", 150), "rollback": ("Rollback", "undo", 24), "beta_setup": ("Automatic beta setup", "sync", 285), "beta_lock": ("Beta password", "check", 150), "live_push": ("Live folder → GitHub", "upload", 215), "live_update": ("Live updated from main", "rocket", 150), "beta_api": ("Beta API for apps", "upload", 285)}.get(j.kind, (j.kind, "activity", 245)) %}
           <details class="row job-row">
             <summary><span class="row-lead"><span class="row-ic" style="--h:{{ jl[2] }}">{{ icon(jl[1]) }}</span>
               <span class="row-main"><span class="row-title">{{ jl[0] }}</span><span class="row-sub">{{ j.note }} · {{ j.by_user.name if j.by_user else "System" }} · {{ j.created_at|stamp }}</span></span></span>
@@ -482,41 +533,6 @@
         </form>
       {% else %}<p class="hint">First set the <strong>live</strong> server and folder (and its database) in “Servers &amp; deploy” below — the beta is made as a copy of live.</p>{% endif %}
     </section>
-    {% if live and live.server_id and live.deploy_path %}
-    <section class="panel-box" id="live-releases">
-      <h2><span class="h-ic" style="--h:150">{{ icon('rocket') }}</span>Safe Go Live (release folders)</h2>
-      {% if live.layout == "releases" %}
-        <p>Live uses release folders · current <span class="mono">{{ live.current_release }}</span>{% if live.shared %} · kept across releases: <span class="mono">{{ live.shared|join(", ") }}</span>{% endif %}{% if live.restart_units %} · services restarted after a switch: <span class="mono">{{ live.restart_units|join(", ") }}</span>{% endif %}.</p>
-        <p class="hint">A Go Live builds the next release beside the running one, switches in an instant, restarts only this site, and switches straight back if the site doesn't answer.</p>
-        <form method="post" action="{{ url_for('projects.save_live_steps', project_id=p.id) }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <div class="field"><label for="live-steps">Steps for a new live release <span class="hint">(run inside the new release before the switch; one command per line; <span class="mono">@publish web/dist</span> = built files → the web root)</span></label>
-            <textarea id="live-steps" name="live_recipe" class="mono" rows="5" placeholder="{{ p.beta_recipe or 'composer install --no-dev --no-interaction' }}">{{ p.live_recipe }}</textarea>
-            <span class="hint">{% if p.live_recipe %}Used for every Go Live.{% else %}Empty — the beta's steps are used (shown greyed).{% endif %} Never database-wiping commands here.</span></div>
-          <button class="btn" type="submit">Save live steps</button>
-        </form>
-        <form method="post" action="{{ url_for('projects.start_job', project_id=p.id, kind='live_steps') }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button class="btn" type="submit" {% if busy %}disabled title="{{ busy }}"{% endif %}>{{ icon('activity') }}{{ "Let Claude rewrite the live steps" if p.live_recipe else "Let Claude write the live steps" }}</button>
-          <span class="hint">Claude only reads the live site; the next Go Live tries the steps in a new release before switching. Written by itself after a switch to release folders and before a first Go Live.</span>
-        </form>
-      {% else %}
-        <p class="hint">Today a Go Live updates the live folder in place. Switching to <strong>release folders</strong> (done once, with a backup, without taking the site down) makes every Go Live build the new version beside the running one, switch in an instant, and switch back by itself if the site doesn't answer. Settings files, uploads and database files stay shared.</p>
-        <button class="btn" type="button" {% if busy %}data-soon="{{ busy }}"{% else %}data-open="dlg-convert"{% endif %}>{{ icon('rocket') }}Switch live to release folders…</button>
-        <dialog class="dlg" id="dlg-convert">
-          <form method="post" action="{{ url_for('projects.live_convert', project_id=p.id) }}" autocomplete="off">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="dlg-head"><h2>Release folders for {{ live.url.replace("https://", "") }}</h2><button type="button" class="icon-btn" data-close aria-label="Close">{{ icon('x') }}</button></div>
-            <div class="dlg-body">
-              <ol class="summary-list"><li>A full backup of the live folder.</li><li>The folder becomes <span class="mono">releases/r…</span> + a link; settings, uploads and database files move to <span class="mono">shared/</span> (found by comparing with the files on GitHub). A web root of its own (e.g. a React build) moves into the release too.</li><li>Only this site's PHP workers / services restart. A SQLite database moves only while its service is paused for those few seconds — it is never copied.</li><li>The site and every service are checked right away; anything wrong puts it back exactly as it was.</li></ol>
-              <div class="field"><label for="cv-code">Authenticator code</label><input id="cv-code" name="code" inputmode="numeric" maxlength="7" required class="mono otp-in" placeholder="6 digits from your phone"></div>
-            </div>
-            <div class="dlg-foot"><button type="button" class="btn" data-close>Cancel</button><button class="btn btn-primary" type="submit">Switch this site</button></div>
-          </form>
-        </dialog>
-      {% endif %}
-    </section>
-    {% endif %}
     {% if p.ai_engine == "claude_code" %}
     <form class="panel-box" id="project-notes" method="post" action="{{ url_for('projects.save_notes', project_id=p.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

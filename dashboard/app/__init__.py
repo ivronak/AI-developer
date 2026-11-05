@@ -155,23 +155,6 @@ def create_app():
         jobs.start(j.id, betas.run_lock, background=False)
         click.echo(f"{db.session.get(Job, j.id).state}: {db.session.get(Job, j.id).note}")
 
-    @app.cli.command("rehearse-go-live")
-    @click.argument("project_id", type=int)
-    def rehearse_go_live_command(project_id):
-        """Rehearsal projects only: Go Live v2 with the current code on the copy site, then roll back."""
-        from . import jobs, releases
-        from .models import Job, Project, User
-        p = db.session.get(Project, project_id) or (_ for _ in ()).throw(click.ClickException("No such project."))
-        owner = User.query.filter_by(role="owner").first()
-        j = Job(project_id=p.id, kind="go_live", note="Waiting to start (rehearsal, server command)", by_user_id=owner.id if owner else None)
-        db.session.add(j)
-        db.session.commit()
-        jobs.start(j.id, releases.run_rehearse_go_live, background=False)
-        j = db.session.get(Job, j.id)
-        click.echo(f"{j.state}: {j.note}")
-        if j.output:
-            click.echo(j.output[-4000:])
-
     @app.cli.command("beta-tool")
     @click.argument("project_id", type=int)
     @click.argument("tool")

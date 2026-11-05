@@ -10,7 +10,7 @@ from app.crypto import sha256
 from app.models import Job
 
 bp = Blueprint("internal_mcp", __name__)
-JOB_KINDS = ("beta_setup", "beta_deploy", "go_live", "live_convert", "live_steps", "change_debug", "beta_api")
+JOB_KINDS = ("beta_setup", "beta_deploy", "go_live", "change_debug", "beta_api")
 
 
 def _err(id_, code, message, status=200):

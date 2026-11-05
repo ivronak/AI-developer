@@ -111,7 +111,7 @@ def accept_page(project):
 
 
 def run_all():
-    from app import ai_budget, gitcheck, mobile, reminders
+    from app import ai_budget, gitcheck, livesync, mobile, reminders
     reminders.check()
     try:
         mobile.refresh_due()                              # mobile test builds running on Codemagic
@@ -119,6 +119,7 @@ def run_all():
         db.session.rollback()
     ai_budget.check()
     gitcheck.check_due(Project.query.filter_by(is_active=True).all())
+    livesync.refresh_due(Project.query.filter_by(is_active=True).all())
     results = {}
     watched = Project.query.filter_by(monitor_enabled=True, is_active=True).all()
     t = now()

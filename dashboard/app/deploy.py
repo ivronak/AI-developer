@@ -118,12 +118,38 @@ def env_script(path, pairs, filename=".env"):
 
 
 # ---------- beta branch ----------
+def developer_commits(root, project, base, remote_branches):
+    """Commits on origin/beta that are neither on the default branch nor on any change branch of this project — i.e. a
+    developer pushed them to beta by hand. Rebuilding beta from scratch would wipe them."""
+    if "origin/beta" not in remote_branches:
+        return []
+    known = {c.branch for c in Change.query.filter(Change.project_id == project.id, Change.branch.isnot(None)).all()}
+    refs = [f"origin/{b}" for b in sorted(known) if f"origin/{b}" in remote_branches]
+    out = ws.git(root, "log", "--no-merges", "--format=%h %an: %s", "origin/beta", "--not", f"origin/{base}", *refs)
+    return [l for l in out.splitlines() if l.strip()]
+
+
 def build_beta_branch(project, job):
-    """beta = default branch + each ready change (merge, skip any that conflicts). Pushes it. Returns (sha, merged, skipped)."""
+    """beta = default branch + each ready change (merge, skip any that conflicts). Pushes it. Returns (sha, merged, skipped).
+    Nobody's work is thrown away: when a developer pushed commits to beta, beta is updated on top of them (default branch and
+    the ready changes are merged in, a normal push); otherwise beta is rebuilt from the default branch."""
     base = project.default_branch or "main"
     root = ws.prepare(project, "beta", base)                 # checkout (fetches everything)
-    ws.git(root, "checkout", "--quiet", "-B", "beta", f"origin/{base}")
     remote_branches = {l.strip() for l in ws.git(root, "branch", "-r").splitlines()}
+    theirs = developer_commits(root, project, base, remote_branches)
+    if theirs:
+        msg = (f"A developer pushed {len(theirs)} commit{'s' if len(theirs) != 1 else ''} to beta — keeping them "
+               f"(latest: {theirs[0][:80]}); beta is updated, not rebuilt")
+        note(job, msg, msg)
+        ws.git(root, "checkout", "--quiet", "-B", "beta", "origin/beta")
+        try:
+            ws.git(root, "merge", "--no-edit", "-m", f"Beta: update from {base}", f"origin/{base}")
+        except ws.WorkspaceError:
+            ws.git(root, "merge", "--abort", check=False)
+            raise ws.WorkspaceError(f"the developer's work on beta conflicts with {base} — nothing was changed. "
+                                    f"Merge {base} into beta by hand, then deploy beta again")
+    else:
+        ws.git(root, "checkout", "--quiet", "-B", "beta", f"origin/{base}")
     merged, skipped = [], []
     changes = Change.query.filter(Change.project_id == project.id, Change.status.in_(ON_BETA)).order_by(Change.id).all()
     for c in changes:
@@ -136,7 +162,7 @@ def build_beta_branch(project, job):
         except ws.WorkspaceError:
             ws.git(root, "merge", "--abort", check=False)
             skipped.append(c)
-    ws.git(root, "push", "--quiet", "--force", "origin", "beta", auth=True)
+    ws.git(root, "push", "--quiet", *([] if theirs else ["--force"]), "origin", "beta", auth=True)
     return ws.git(root, "rev-parse", "--short", "HEAD").strip(), merged, skipped
 
 

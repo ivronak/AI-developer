@@ -407,3 +407,13 @@ Big picture lives in `TRACKER.md` (status, decisions) and `CHANGES.md` (the "zer
   it like before, then saves the code-guard checkpoint from that folder. First run: commit 9670065, migration
   a1c3e5f7b9d2 ran, healthy, guard checkpoint d1726af. Live check: Main account (the runner's own web login) → Logged
   in, Max, 13 models, 8 connectors. Next: owner adds more accounts from Settings; revoke the old setup-token on claude.ai.
+- **2026-11-05 · Deploy flow rework (owner's answers in Q&A).** No release folders (`releases.py`, Safe Go Live panel,
+  `rehearse-go-live`, live-steps/convert routes removed; a live env with layout "releases" is refused with a clear message).
+  Beta deploy keeps developer commits on `origin/beta` (merges main in, plain push; conflict → stops, nothing changed).
+  Rollback: if main == the release, restore the old tree; if main moved on, `git revert` of `previous..release` (keeps newer
+  work; overlap → stops). New `app/livesync.py` + migration b2d4f6a8c0e1 (environments.drift, drift_at): live vs GitHub main
+  (HEAD/ahead/behind/changed files, re-read every 30 min and before Go Live), owner-only Commit & push (authenticator code,
+  secret-looking files refused, side branch `dashboard/live-edits` when main moved) and Update live from main (snapshot,
+  `git pull` deploy, health, Deployment row). Go Live's drift check now also refuses unpushed commits. 423 checks.
+  The aided app's own folder is not a git checkout, so this panel can't be used on it yet.
+

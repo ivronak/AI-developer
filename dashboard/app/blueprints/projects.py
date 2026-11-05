@@ -501,14 +501,14 @@ def save_deploy(project_id):
 @login_required
 def start_job(project_id, kind):
     """Beta deploy / Live → Beta sync. Both touch beta only (live is only read by the sync)."""
-    from app import betas, deploy, jobs, releases
+    from app import betas, deploy, jobs
     from app.models import Job
     p = project_or_404(project_id)
     fn = {"beta_deploy": betas.deploy_fn(p), "sync": deploy.run_sync, "beta_setup": betas.run_setup,
-          "beta_lock": betas.run_lock, "live_steps": releases.run_live_steps}.get(kind)
+          "beta_lock": betas.run_lock}.get(kind)
     if fn is None:
         abort(404)
-    if kind in ("beta_setup", "beta_lock", "live_steps") and not current_user.is_owner:
+    if kind in ("beta_setup", "beta_lock") and not current_user.is_owner:
         abort(403)
     busy = jobs.busy_reason(p.id)
     if busy:
@@ -518,8 +518,7 @@ def start_job(project_id, kind):
             note="New password" if kind == "beta_lock" and request.form.get("new_password") == "1" else "Waiting to start")
     db.session.add(j)
     log("Job", project_id=p.id, details={"beta_deploy": "Beta deploy started", "sync": "Live → Beta sync started",
-                                         "beta_setup": "Automatic beta setup started", "beta_lock": "Beta password set",
-                                         "live_steps": "Claude writes the live release steps"}[kind])
+                                         "beta_setup": "Automatic beta setup started", "beta_lock": "Beta password set"}[kind])
     db.session.commit()
     jobs.start(j.id, fn, background=not current_app.config.get("AGENT_SYNC"))
     return redirect(url_for("projects.detail", project_id=p.id) + "#deploys")
@@ -588,9 +587,7 @@ def go_live(project_id):
     log("Job", project_id=p.id, details=f"Go Live started: {len(ship)} change{'s' if len(ship) != 1 else ''}"
                                          + (f" · without approval: {reason}" if reason else ""))
     db.session.commit()
-    from app import releases
-    fn = releases.run_go_live_v2 if (p.env("live") and p.env("live").layout == "releases") else golive.run_go_live
-    jobs.start(j.id, lambda job: fn(job, ship, reason), background=not current_app.config.get("AGENT_SYNC"))
+    jobs.start(j.id, lambda job: golive.run_go_live(job, ship, reason), background=not current_app.config.get("AGENT_SYNC"))
     return redirect(url_for("projects.detail", project_id=p.id) + "#deploys")
 
 
@@ -619,10 +616,63 @@ def rollback(project_id):
     db.session.add(j)
     log("Job", project_id=p.id, details=f"Rollback started: {cur.commit} → {target[:7]}" + (" + database snapshot" if with_db else ""))
     db.session.commit()
-    from app import releases
-    rfn = releases.run_rollback_v2 if (p.env("live") and p.env("live").layout == "releases") else golive.run_rollback
-    jobs.start(j.id, lambda job: rfn(job, dep_id, with_db), background=not current_app.config.get("AGENT_SYNC"))
+    jobs.start(j.id, lambda job: golive.run_rollback(job, dep_id, with_db), background=not current_app.config.get("AGENT_SYNC"))
     return redirect(url_for("projects.detail", project_id=p.id) + "#deploys")
+
+
+@bp.post("/projects/<int:project_id>/live-check")
+@login_required
+@owner_required
+def live_check(project_id):
+    from app import livesync, remote
+    p = project_or_404(project_id)
+    back = redirect(url_for("projects.detail", project_id=p.id) + "#deploys")
+    try:
+        st = livesync.refresh(p)
+    except remote.RemoteError as e:
+        flash(str(e), "bad")
+        return back
+    if st is None:
+        flash("Set the live server and folder first (Settings → Servers & deploy).", "bad")
+    elif not st["fetch_ok"]:
+        flash("The live server cannot reach GitHub — check its GitHub connection.", "bad")
+    return back
+
+
+def _live_job(project_id, kind, label, run):
+    from app import jobs
+    from app.models import Job
+    p = project_or_404(project_id)
+    back = redirect(url_for("projects.detail", project_id=p.id) + "#deploys")
+    busy = jobs.busy_reason(p.id)
+    if busy:
+        flash(busy, "bad")
+        return back
+    stop = _confirm_code(back)
+    if stop:
+        return stop
+    j = Job(project_id=p.id, kind=kind, note="Waiting to start", by_user_id=current_user.id)
+    db.session.add(j)
+    log("Job", project_id=p.id, details=f"{label} started")
+    db.session.commit()
+    jobs.start(j.id, run, background=not current_app.config.get("AGENT_SYNC"))
+    return back
+
+
+@bp.post("/projects/<int:project_id>/live-push")
+@login_required
+@owner_required
+def live_push(project_id):
+    from app import livesync
+    return _live_job(project_id, "live_push", "Commit & push of the live folder", livesync.run_commit_push)
+
+
+@bp.post("/projects/<int:project_id>/live-update")
+@login_required
+@owner_required
+def live_update(project_id):
+    from app import livesync
+    return _live_job(project_id, "live_update", "Update of live from main", livesync.run_update)
 
 
 @bp.post("/projects/<int:project_id>/engine")
@@ -786,51 +836,3 @@ def apps_build(project_id):
     except mobile.MobileError as e:
         flash(str(e), "bad")
     return redirect(url_for("projects.detail", project_id=p.id) + "#apps")
-
-
-@bp.post("/projects/<int:project_id>/live-steps")
-@login_required
-@owner_required
-def save_live_steps(project_id):
-    """The steps that make a NEW live release work (run in the new release folder before the switch). Owner only."""
-    p = project_or_404(project_id)
-    steps = (request.form.get("live_recipe") or "").replace("\r\n", "\n").strip()[:4000]
-    for line in steps.splitlines():
-        folder = line.split(" ", 1)[1].strip() if line.startswith("@publish ") else ""
-        if line.startswith("@publish ") and (not re.match(r"^[\w.-]+(/[\w.-]+)*$", folder) or ".." in folder.split("/")):
-            flash(f"Not a folder inside the release: {line}", "bad")
-            return redirect(url_for("projects.detail", project_id=p.id) + "#live-releases")
-    p.live_recipe = steps
-    log("Project settings", project_id=p.id, details="Live release steps saved" if steps else "Live release steps cleared (beta steps are used)")
-    db.session.commit()
-    flash("Live release steps saved.", "ok")
-    return redirect(url_for("projects.detail", project_id=p.id) + "#live-releases")
-
-
-@bp.post("/projects/<int:project_id>/live-convert")
-@login_required
-@owner_required
-def live_convert(project_id):
-    """CHANGES Step 6: switch ONE live site to release folders — only when the owner asks (answer 5 = A), with the code."""
-    from app import jobs, releases
-    from app.models import Job
-    p = project_or_404(project_id)
-    back = redirect(url_for("projects.detail", project_id=p.id) + "#settings")
-    live = p.env("live")
-    if live is None or live.server is None or not live.deploy_path:
-        flash("Set the live server and folder first.", "bad")
-        return back
-    busy = jobs.busy_reason(p.id)
-    if busy:
-        flash(busy, "bad")
-        return back
-    stop = _confirm_code(back)
-    if stop:
-        return stop
-    j = Job(project_id=p.id, kind="live_convert", note="Waiting to start", by_user_id=current_user.id)
-    db.session.add(j)
-    log("Job", project_id=p.id, details=f"Switch live to release folders started ({live.url})")
-    db.session.commit()
-    jobs.start(j.id, releases.run_convert, background=not current_app.config.get("AGENT_SYNC"))
-    return redirect(url_for("projects.detail", project_id=p.id) + "#deploys")
-

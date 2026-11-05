@@ -1,6 +1,6 @@
 """Go Live (F10) and Rollback (F11) — Owner only, each confirmed with the authenticator code, run as a background Job.
 
-Go Live:  1. drift check — the live folder must have no direct edits (files changed on the server by hand)
+Go Live:  1. drift check — the live folder must have no direct edits or commits GitHub lacks (Commit & push in the project page puts them on GitHub first)
           2. snapshot of the live database, kept on the live server (~/ai-dashboard-snapshots, Step 11 copies it to cloud storage)
           3. release = default branch + each change going live, squash-merged (a conflict stops everything; nothing is pushed)
           4. the project's tests on the release; failing tests stop everything
@@ -32,6 +32,9 @@ def _live(project):
     live = project.env("live")
     if live is None or live.server is None or not live.deploy_path:
         raise DeployError("Set the live server and folder first (project → Settings → Servers & deploy).")
+    if live.layout == "releases":
+        raise DeployError("This live folder was switched to release folders, which the dashboard no longer uses. "
+                          "Put the site back into one folder (the git checkout) first.")
     return live
 
 
@@ -44,30 +47,33 @@ def _run(server, body, job, fail_msg, timeout=900):
 
 
 def drift_check(project, live, job):
-    """Refuse when someone changed files directly in the live folder. Returns the commit live runs now."""
+    """Refuse when the live folder has direct edits or commits GitHub does not have. Returns the commit live runs now."""
+    from app import gitcheck, livesync
     note(job, "Checking live for direct edits on the server")
-    out = _run(live.server, f"cd {shlex.quote(live.deploy_path)}\n"
-                            "echo \"HEAD=$(git rev-parse HEAD)\"\necho \"ORIGIN=$(git remote get-url origin 2>/dev/null)\"\n"
-                            "git status --porcelain --untracked-files=no\n",
-               job, "Could not read the live folder with git — is it a git checkout of this repo?", timeout=120)
-    lines = [l for l in out.splitlines() if l.strip()]
-    head = next((l[5:].strip() for l in lines if l.startswith("HEAD=")), "")
-    from app import gitcheck
-    origin = gitcheck.repo_slug(next((l[7:].strip() for l in lines if l.startswith("ORIGIN=")), ""))
+    out = _run(live.server, livesync.state_script(live.deploy_path, project.default_branch or "main")
+               + "echo \"ORIGIN=$(git remote get-url origin 2>/dev/null)\"\n",
+               job, "Could not read the live folder with git — is it a git checkout of this repo?", timeout=180)
+    st = livesync.parse_state(out)
+    head = st["head"]
+    origin = gitcheck.repo_slug(next((l[7:].strip() for l in out.splitlines() if l.startswith("ORIGIN=")), ""))
     live.git_origin, live.git_checked_at = origin, now()
+    live.drift, live.drift_at = st, now()
     if origin and project.github_repo and origin != project.github_repo.lower():
         gitcheck._remember_alias(origin)            # an old name after a transfer may still be the same repo
     db.session.commit()
     wrong = gitcheck.problem(project, live)
     if wrong:
         raise DeployError(wrong + " Nothing was changed — a Go Live now would put the wrong code live. Point the live "
-                          "folder at this project's repo first (or wait for Go Live v2, which doesn't need git on the server).")
-    edited = [l[3:].strip() for l in lines if not l.startswith(("HEAD=", "ORIGIN=")) and len(l) > 3]
-    if edited:
-        note(job, "", "Files changed directly on the live server:\n" + "\n".join(edited[:50]))
-        raise DeployError(f"Someone changed {len(edited)} file{'s' if len(edited) != 1 else ''} directly on the live server "
-                          f"({', '.join(edited[:3])}{'…' if len(edited) > 3 else ''}). Nothing was changed. "
-                          "Ask the developer to commit those edits to GitHub (or undo them), then Go Live again.")
+                          "folder at this project's repo first.")
+    if st["files"] or st["ahead"]:
+        shown = st["files"]
+        if shown:
+            note(job, "", "Files changed directly on the live server:\n" + "\n".join(shown[:50]))
+        what = (f"{len(shown)} file{'s' if len(shown) != 1 else ''} changed directly on the live server" if shown else "") + \
+               (" and " if shown and st["ahead"] else "") + \
+               (f"{st['ahead']} commit{'s' if st['ahead'] != 1 else ''} that GitHub does not have" if st["ahead"] else "")
+        raise DeployError(f"The live folder has {what}. Nothing was changed. Press “Commit & push” on the project page "
+                          "(the live code goes to GitHub first), then Go Live again.")
     return head
 
 
@@ -230,7 +236,20 @@ def run_rollback(job, deployment_id, with_db):
     note(job, f"Putting the code back to {target[:7]}")
     try:
         root = ws.prepare(project, base, base)
-        ws.git(root, "read-tree", "-u", "--reset", target)
+        try:
+            ws.git(root, "cat-file", "-e", f"{target}^{{commit}}")
+        except ws.WorkspaceError:
+            raise DeployError(f"The earlier version {target[:7]} is not on GitHub (it was never pushed), so it cannot be restored from here.")
+        if ws.git(root, "rev-parse", "HEAD").strip() == ws.git(root, "rev-parse", f"{cur.commit}^{{commit}}").strip():
+            ws.git(root, "read-tree", "-u", "--reset", target)
+        else:
+            # main moved on after this Go Live (a developer pushed): undo only this release, keep the newer work
+            try:
+                ws.git(root, "revert", "--no-commit", f"{target}..{cur.commit}")
+            except ws.WorkspaceError:
+                ws.git(root, "revert", "--abort", check=False)
+                raise DeployError("main has newer work that overlaps this release, so it cannot be undone automatically "
+                                  "(nothing was changed). Fix it by hand, or ask Claude to revert it on a branch.")
         if ws.git(root, "status", "--porcelain").strip():
             ws.git(root, "commit", "--quiet", "-m", f"Rollback to {target[:7]} (undo live release {cur.commit})")
         sha = ws.git(root, "rev-parse", "--short", "HEAD").strip()

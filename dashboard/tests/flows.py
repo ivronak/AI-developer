@@ -644,6 +644,48 @@ with app.app_context():
        "beta site not answering after a deploy → failed")
     health_answer[0] = (True, 200)
 
+    # a developer pushed to beta by hand → the next beta deploy keeps that work (updated on top, normal push, no force)
+    run_git("fetch", "-q", bare, "beta:devbeta")
+    run_git("checkout", "-q", "devbeta")
+    open(os.path.join(seed_dir, "dev.txt"), "w").write("developer work\n")
+    run_git("add", "dev.txt")
+    run_git("commit", "-qm", "dev: hotfix pushed straight to beta")
+    dev_sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=seed_dir, capture_output=True, text=True).stdout.strip()
+    run_git("push", "-q", bare, "devbeta:beta")
+    run_git("checkout", "-q", "main")
+    run_git("branch", "-q", "-D", "devbeta")
+    bare_show = lambda ref: subprocess.run(["git", "--git-dir", bare, "show", ref], capture_output=True, text=True).stdout
+    c.post(f"/projects/{newp.id}/jobs/beta_deploy")
+    j = Job.query.order_by(Job.id.desc()).first()
+    ok(j.state == "done" and "developer pushed 1 commit" in j.output, "beta deploy notices a developer's commit on beta")
+    ok(bare_show("beta:dev.txt") == "developer work\n" and bare_show("beta:README.md") == "Hello CRM v3\n"
+       and subprocess.run(["git", "--git-dir", bare, "merge-base", "--is-ancestor", dev_sha, "beta"]).returncode == 0,
+       "the developer's work is still on beta, together with main and the ready change")
+    ok(bare_show("main:dev.txt") == "", "the developer's beta work never reaches main by itself")
+    # developer work that conflicts with main → nothing is pushed, plain message
+    main_before_dev = subprocess.run(["git", "--git-dir", bare, "rev-parse", "main"], capture_output=True, text=True).stdout.strip()
+    run_git("fetch", "-q", bare, "main:devmain")
+    run_git("checkout", "-q", "devmain")
+    open(os.path.join(seed_dir, "README.md"), "w").write("main moved on\n")
+    run_git("commit", "-qam", "main moved on")
+    run_git("push", "-q", bare, "devmain:main")
+    run_git("fetch", "-q", bare, "beta:devbeta2")
+    run_git("checkout", "-q", "devbeta2")
+    open(os.path.join(seed_dir, "README.md"), "w").write("developer's own README\n")
+    run_git("commit", "-qam", "dev: README on beta")
+    run_git("push", "-q", bare, "devbeta2:beta")
+    beta_before = subprocess.run(["git", "--git-dir", bare, "rev-parse", "beta"], capture_output=True, text=True).stdout
+    c.post(f"/projects/{newp.id}/jobs/beta_deploy")
+    j = Job.query.order_by(Job.id.desc()).first()
+    ok(j.state == "failed" and "conflicts with main" in j.note and
+       subprocess.run(["git", "--git-dir", bare, "rev-parse", "beta"], capture_output=True, text=True).stdout == beta_before,
+       "developer work on beta that conflicts with main stops the deploy and changes nothing")
+    # put the shared test repo back as it was (main, and a beta that holds no hand-made work)
+    run_git("checkout", "-q", "-f", "main")
+    run_git("branch", "-q", "-D", "devmain", "devbeta2")
+    subprocess.run(["git", "--git-dir", bare, "update-ref", "refs/heads/main", main_before_dev], check=True)
+    subprocess.run(["git", "--git-dir", bare, "update-ref", "-d", "refs/heads/beta"], check=True)
+
     # Live → Beta sync
     remote_calls.clear()
     c.post(f"/projects/{newp.id}/jobs/sync")
@@ -1210,345 +1252,173 @@ with app.app_context():
     db.session.refresh(ch7)
     ok(ch7.status == "live" and main_readme() == "Hello CRM v3\n", "after a fix, the same change can go live again")
 
-    # ---------- Go Live v2: release folders (CHANGES Step 6) — fake server ----------
-    from app import releases as rel_mod
-    v2_scripts, v2 = [], {"inside": True, "edited": "", "recipe_exit": 0, "unit": True, "down": ""}
+    # main moved on after that Go Live (a developer pushed) → Rollback undoes only the release and keeps the newer work
+    cur2, target2 = gl_mod.rollback_target(newp)
+    run_git("fetch", "-q", bare, "main:devmain")
+    run_git("checkout", "-q", "devmain")
+    open(os.path.join(seed_dir, "dev2.txt"), "w").write("later developer work\n")
+    run_git("add", "dev2.txt")
+    run_git("commit", "-qm", "dev: later work on main")
+    run_git("push", "-q", bare, "devmain:main")
+    run_git("checkout", "-q", "main")
+    run_git("branch", "-q", "-D", "devmain")
+    c.post(f"/projects/{newp.id}/rollback", data={"deployment": str(cur2.id), "code": fresh_code()})
+    j = Job.query.order_by(Job.id.desc()).first()
+    ok(j.kind == "rollback" and j.state == "done" and main_readme() == "Hello CRM\n"
+       and subprocess.run(["git", "--git-dir", bare, "show", "main:dev2.txt"], capture_output=True, text=True).stdout == "later developer work\n",
+       "Rollback undoes the release but keeps work a developer pushed to main afterwards")
+    ch7.status = "approved"
+    db.session.commit()
+    c.post(f"/projects/{newp.id}/go-live", data={"code": fresh_code()})
+    db.session.refresh(ch7)
+    ok(ch7.status == "live" and main_readme() == "Hello CRM v3\n", "and it goes live again")
 
-    def v2_run(server, script, timeout=900):
-        v2_scripts.append(script)
-        if "WEBROOT_INSIDE" in script:
-            if v2["inside"]:
-                return 0, ("WEBUSER=crmweb\nDOCROOT=/home/live/crm/public\nWEBROOT_INSIDE=1\nOWNER=crmweb\nSIZE=300\nFREE=40000\n"
-                           "SHARE=.env\nSHARE=storage\nSHARE=storage/app\nLOOSE=old-notes.txt\n")
-            return 0, ("WEBUSER=crmweb\nDOCROOT=/home/live/public_html\nOWNER=root\nSIZE=300\nFREE=40000\n"
-                       "SHARE=backend/.env\nSHARE=backend/crm.db\nSHARE=backend/logs\n" + ("UNIT=crm-api.service\n" if v2["unit"] else ""))
-        if "before-releases" in script and "cp -a --reflink=auto" in script:
-            return 0, "OLD=/home/live/crm.before-releases-1" + ("" if v2["inside"] else "\nWOLD=/home/live/public_html.before-releases-1")
-        if "systemctl is-active" in script:
-            return 0, v2["down"]
-        if ".release-made\" ] || exit 0" in script or "find -L" in script:
-            return 0, v2["edited"]
-        if "echo WEBUSER=$(grep -m1 extUser" in script:
-            return 0, "WEBUSER=crmweb\nOWNER=crmweb"
-        if script.startswith("runuser -u"):
-            return v2["recipe_exit"], "composer: done" if not v2["recipe_exit"] else "composer: Your requirements could not be resolved"
-        return live_run(server, script, timeout)
-
-    remote_mod.run, remote_mod.push_dir = v2_run, (lambda s, l, r, timeout=1800: "")
+    # ---------- SQLite live database: snapshot + restore (release folders were dropped, owner 2026-11-05) ----------
+    from app import golive as golive_mod
+    remote_mod.push_dir = (lambda s, l, r, timeout=1800: "")
     health_answer[0] = (True, 200)
     deploy_mod.health_ok = lambda url, auth=None: health_answer[0]
     lv = newp.env("live")
-    lv.layout, lv.current_release, lv.git_origin = "", None, None
+    keep_live_db = lv.db_name
+    lv.db_name, lv.restart_units, newp.db_engine = "sqlite:backend/crm.db", ["crm-api.service"], "sqlite"
     db.session.commit()
-    ok(dv.post(f"/projects/{newp.id}/live-convert", data={"code": "1"}).status_code == 403, "developers can't switch live to release folders")
-    # a web root of its own next to a backend + SQLite (React build + Flask service, like iv-crm)
-    v2["inside"], v2["unit"] = False, False
-    c.post(f"/projects/{newp.id}/live-convert", data={"code": fresh_code()})
-    j = Job.query.order_by(Job.id.desc()).first()
-    ok(j.kind == "live_convert" and j.state == "failed" and "can't be paused" in j.note and newp.env("live").layout == ""
-       and not any("cp -a --reflink" in sc for sc in v2_scripts), "a live SQLite database with no service to pause is never moved")
-    v2["unit"], v2_scripts[:] = True, []
-    keep_live_db = newp.env("live").db_name
-    newp.env("live").db_name = None
-    db.session.commit()
-    c.post(f"/projects/{newp.id}/live-convert", data={"code": fresh_code()})
-    j = Job.query.order_by(Job.id.desc()).first()
-    db.session.refresh(newp)
-    lv = newp.env("live")
-    conv = next(sc for sc in v2_scripts if "before-releases" in sc)
-    ok(j.state == "done" and lv.layout == "releases" and lv.restart_units == ["crm-api.service"]
-       and lv.shared == ["backend/.env", "backend/crm.db", "backend/logs"], "a React + backend site converts; its service is found by itself")
-    ok("P=backend; if [ -d \"$C/$P\" ]" in conv and 'chown --reference="$C/$P" "$SH/$P"' in conv and conv.index('chown --reference="$C/$P"') < conv.index("systemctl stop"),
-       "folders made in shared/ get the owner of the same folder in the live code (the site's user can write next to its database)")
-    ok(lv.db_name == "sqlite:backend/crm.db" and newp.db_engine == "sqlite", "the SQLite database is remembered for Go Live snapshots")
-    from app import golive as golive_mod
     snap_scripts = []
-    keep_run = remote_mod.run
     remote_mod.run = lambda server, script, timeout=900: (snap_scripts.append(script), (0, "SIZE=10\nPATH=/root/ai-dashboard-snapshots/x.sqlite.gz"))[1]
     sj = Job(project_id=newp.id, kind="go_live", by_user_id=owner.id)
     db.session.add(sj)
     db.session.commit()
     sn = golive_mod.snapshot(newp, lv, sj)
-    remote_mod.run = keep_run
+    remote_mod.run = fake_run
     sj.state = "done"
-    ok(sn and "s.backup(d)" in snap_scripts[0] and "readlink -f /home/live/crm/backend/crm.db" in snap_scripts[0] and ".sqlite.gz" in snap_scripts[0]
+    ok(sn and "s.backup(d)" in snap_scripts[0] and f"readlink -f {lv.deploy_path}/backend/crm.db" in snap_scripts[0] and ".sqlite.gz" in snap_scripts[0]
        and "mysqldump" not in snap_scripts[0], "a Go Live snapshot of a SQLite site is a consistent SQLite backup")
-    lv.restart_units = ["crm-api.service"]
     rs = golive_mod.restore_script(newp, lv, "/root/ai-dashboard-snapshots/x.sqlite.gz")
     ok(rs.index("systemctl stop crm-api.service") < rs.index('mv -f "$T" "$D"') and "trap 'systemctl start crm-api.service" in rs
        and 'rm -f "$D-wal"' in rs, "restoring a SQLite snapshot swaps the file only while the service is stopped")
-    lv.db_name, newp.db_engine = keep_live_db, "mysql"
-    db.session.commit()
-    ok("--exclude=crm/backend/crm.db " in conv and "--exclude=crm/backend/crm.db-wal" in conv and "|| [ $? -eq 1 ]" in conv,
-       "the folder backup leaves the busy database out (own backup) and doesn't fail on 'file changed while reading'")
-    ok("s.backup(d)" in conv and conv.index("s.backup(d)") < conv.index("cp -a --reflink"),
-       "the SQLite database gets a consistent backup first")
-    stop, move, switch = conv.index("systemctl stop crm-api.service"), conv.index('mv -f "$C/$S$X" "$SH/$S$X"'), conv.index('mv "$C" "$OLD"')
-    ok(stop < move < switch and "trap finish EXIT" in conv and "systemctl start crm-api.service" in conv
-       and 'rm -f "$R/$S" "$R/$S-wal"' in conv, "the live database is moved (never copied) only while its service is stopped")
-    ok('chgrp --reference="$W" "$REL" "$R"' in conv and conv.index('chgrp --reference="$W"') < conv.index('mv "$C" "$OLD"'),
-       "the web server can reach the web root through the release folders (no 403 after the switch)")
-    ok('cp -a --reflink=auto "$W" "$R/.webroot"' in conv and 'ln -sfn "$C/.webroot" "$W"' in conv,
-       "the web root becomes part of the release, so one switch changes both")
-    import subprocess as _sp
-    ok(all(_sp.run(["bash", "-n"], input="set -euo pipefail\n" + sc, text=True, capture_output=True).returncode == 0 for sc in v2_scripts),
-       "every conversion script is valid bash")
-    lv.layout, lv.current_release, lv.shared, lv.restart_units = "", None, [], []
-    db.session.commit()
-    v2["down"], v2_scripts[:] = "DOWN=crm-api.service", []
-    c.post(f"/projects/{newp.id}/live-convert", data={"code": fresh_code()})
-    j = Job.query.order_by(Job.id.desc()).first()
-    db.session.refresh(newp)
-    ok(j.state == "failed" and "switched back" in j.note and newp.env("live").layout == ""
-       and any("public_html.before-releases-1" in sc and "systemctl restart crm-api.service" in sc for sc in v2_scripts),
-       "a service that doesn't come back → the old code folder and web root are put back")
-    ok("still does not answer" in j.note and any("check it NOW" in a.message for a in Alert.query.filter_by(project_id=newp.id).all()),
-       "if the site still doesn't answer after switching back, the owner is told to check it now")
-    lv = newp.env("live")
-    lv.layout, lv.current_release, lv.shared, lv.restart_units = "", None, [], []
-    db.session.commit()
-    v2["inside"], v2["down"] = True, ""
-    v2_scripts.clear()
-    c.post(f"/projects/{newp.id}/live-convert", data={"code": fresh_code()})
-    j = Job.query.order_by(Job.id.desc()).first()
-    db.session.refresh(newp)
-    lv = newp.env("live")
-    conv = next(sc for sc in v2_scripts if "before-releases" in sc)
-    ok(j.state == "done" and lv.layout == "releases" and lv.shared == [".env", "storage"] and lv.current_release.startswith("r"),
-       "owner switches a live site to release folders (shared: settings + storage)")
-    ok("tar -C" in conv and "cp -a --reflink=auto" in conv and conv.index("tar -C") < conv.index("mv \"$C\""),
-       "a full backup is taken before anything moves; copies are copy-on-write")
-    ok(any("pkill -u crmweb lsphp" in sc for sc in v2_scripts), "only this site's PHP workers restart")
-    first_release = lv.current_release
-
-    # Go Live v2: new release beside the running one, instant switch
-    ch7.status = "approved"
-    newp.live_recipe = "composer install --no-interaction\nphp artisan migrate --force\n@publish public/build"
-    db.session.commit()
-    v2_scripts.clear()
-    import time as _t
-    _t.sleep(1.1)                                   # release names are per second
-    c.post(f"/projects/{newp.id}/go-live", data={"code": fresh_code()})
-    j = Job.query.order_by(Job.id.desc()).first()
-    db.session.refresh(newp)
-    lv = newp.env("live")
-    d = Deployment.query.order_by(Deployment.id.desc()).first()
-    ok(j.state == "done" and lv.current_release != first_release and d.previous_commit == first_release and "release" in d.note,
-       "Go Live v2 builds a new release and switches to it")
-    prep = next(sc for sc in v2_scripts if 'cp -a --reflink=auto "$CUR" "$R"' in sc)
-    ok("--exclude=/.env" in prep and "--exclude=/storage" in prep and "ln -sfn" in prep,
-       "the new release is a copy-on-write copy; shared things are linked, never overwritten")
-    sw = [sc for sc in v2_scripts if "mv -T" in sc]
-    rec = next(i for i, sc in enumerate(v2_scripts) if sc.startswith("runuser -u"))
-    ok(sw and v2_scripts.index(sw[0]) > rec, "the switch happens only after the release steps succeeded")
-    pub = next((i for i, sc in enumerate(v2_scripts) if '"$R/.webroot/"' in sc and "rsync -a" in sc), None)
-    ok(pub is not None and rec < pub < v2_scripts.index(sw[0]) and "--exclude=/.webroot" in prep and "pyvenv.cfg" in prep
-       and "'@publish" not in v2_scripts[rec], "built web files go into the new release's web root before the switch; venv scripts point at the new release")
-    ok("rm -f /home/live/crm.next; ln -s" in sw[0], "the switch stops on any failure (no silent half-switch)")
-    ok(all(_sp.run(["bash", "-n"], input="set -euo pipefail\n" + sc, text=True, capture_output=True).returncode == 0 for sc in v2_scripts),
-       "every Go Live v2 script is valid bash")
-    newp.live_recipe = "composer install --no-interaction\n@publish ../other-site"
-    ch7.status = "approved"
-    db.session.commit()
-    v2_scripts.clear()
-    _t.sleep(1.1)
-    keep_rel = newp.env("live").current_release
-    c.post(f"/projects/{newp.id}/go-live", data={"code": fresh_code()})
-    j = Job.query.order_by(Job.id.desc()).first()
-    db.session.refresh(newp)
-    ok(j.state == "failed" and "NOT switched" in j.note and newp.env("live").current_release == keep_rel and not any("mv -T" in sc for sc in v2_scripts),
-       "'@publish' outside the release is refused; live is not switched")
-    newp.live_recipe = "composer install --no-interaction\nphp artisan migrate --force"
-    db.session.commit()
-
-    # a failing release step: live is not switched
-    ch7.status = "approved"
-    db.session.commit()
-    v2["recipe_exit"], v2_scripts[:] = 1, []
-    before_rel = lv.current_release
-    _t.sleep(1.1)
-    c.post(f"/projects/{newp.id}/go-live", data={"code": fresh_code()})
-    j = Job.query.order_by(Job.id.desc()).first()
-    db.session.refresh(newp)
-    ok(j.state == "failed" and "NOT switched" in j.note and newp.env("live").current_release == before_rel and not any("mv -T" in sc for sc in v2_scripts),
-       "a failing release step never touches live")
-    v2["recipe_exit"] = 0
-
-    # release-fix mode: only safe tools, nothing that can touch the live database / shared files / git
-    from app import beta_tools as bt2
-    rj = Job(project_id=newp.id, kind="go_live", state="running", by_user_id=owner.id)
-    db.session.add(rj)
-    db.session.commit()
-    ok(bt2.tool_list(rj) == [], "a Go Live job without a release to fix gets no tools")
-    rj.context = {"mode": "release_fix", "release": "/home/live/releases/rX", "run_user": "crmweb", "recipe": "composer install", "error": "boom"}
-    db.session.commit()
-    ok({t["name"] for t in bt2.tool_list(rj)} == {"status", "run", "read_file", "web_errors", "save_recipe", "report_problem"},
-       "release-fix mode offers only the release tools")
-    bad = {cmd: bt2.call(rj, "run", {"command": cmd}) for cmd in (
-        "php artisan migrate:fresh --force", "php artisan db:seed", "mysql -e 'drop database x'", "echo 'DELETE FROM users' | php artisan tinker",
-        "cat /home/other-site/.env", "rm -rf ../shared", "git reset --hard", "sudo composer install")}
-    ok(all(e for t, e in bad.values()), "dangerous commands on a live release are refused: " + ", ".join(k for k, (t, e) in bad.items() if not e))
-    ok(not bt2.call(rj, "run", {"command": "composer install --no-interaction"})[1]
-       and not bt2.call(rj, "run", {"command": "/usr/local/lsws/lsphp84/bin/php artisan config:cache"})[1], "install / cache commands are allowed")
-    ok(bt2.call(rj, "read_file", {"path": ".env"})[1] and bt2.call(rj, "read_file", {"path": "storage/logs/x.log"})[1],
-       "shared live files are not shown")
-    ok(bt2.call(rj, "save_recipe", {"steps": ["php artisan db:seed"]})[1] and not bt2.call(rj, "save_recipe", {"steps": ["composer install", "php artisan migrate --force"]})[1],
-       "live steps may migrate (additive) but never seed / wipe")
-    rj.context = dict(rj.context, run_user="root")
-    db.session.commit()
-    ok(bt2.call(rj, "run", {"command": "composer install"})[1] and bt2.call(rj, "status", {})[1],
-       "Claude never works in a live release that belongs to root")
-    rj.state, rj.context = "done", None
-    db.session.commit()
-
-    # a failing release step that Claude fixes inside the new release → every step passes again → switch
-    class FakeReleaseFix:
-        def __init__(self, args, cwd, env):
-            cfg = _json.load(open(args[args.index("--mcp-config") + 1]))["mcpServers"]["beta"]
-            job = Job.query.filter_by(tool_token_hash=_sha256(cfg["headers"]["Authorization"][7:])).one()
-            bt2.call(job, "status", {})
-            bt2.call(job, "run", {"command": "composer install --no-interaction --ignore-platform-req=ext-intl"})
-            bt2.call(job, "save_recipe", {"steps": ["composer install --no-interaction --ignore-platform-req=ext-intl", "php artisan migrate --force"]})
-            v2["recipe_exit"] = 0                     # the fix works
-            ev = {"type": "result", "subtype": "success", "is_error": False, "result": "Added the missing platform flag.", "session_id": "s",
-                  "total_cost_usd": 0.1, "num_turns": 4, "usage": {}}
-            self.stdout, self.stderr, self.returncode = iter([_json.dumps(ev) + "\n"]), io.StringIO(""), 0
-
-        def wait(self, timeout=None):
-            return 0
-
-        def poll(self):
-            return 0
-
-        def kill(self):
-            pass
-
-    from app.crypto import sha256 as _sha256
-    import json as _json
-    prev_spawn = cc_mod._spawn
-    cc_mod._spawn = lambda args, cwd, env: FakeReleaseFix(args, cwd, env)
-    ch7.status = "approved"
-    db.session.commit()
-    v2["recipe_exit"], v2_scripts[:] = 1, []
-    _t.sleep(1.1)
-    c.post(f"/projects/{newp.id}/go-live", data={"code": fresh_code()})
-    j = Job.query.order_by(Job.id.desc()).first()
-    db.session.refresh(newp)
-    ok(j.state == "done" and newp.env("live").current_release != before_rel and "--ignore-platform-req=ext-intl" in newp.live_recipe
-       and j.context is None and j.tool_token_hash is None, "Claude fixes a failing step inside the new release; then it goes live")
-    # Claude writes the live steps: read-only tools, nothing runs on live
-    seen = {}
-
-    class FakeLiveSteps(FakeReleaseFix):
-        def __init__(self, args, cwd, env):
-            cfg = _json.load(open(args[args.index("--mcp-config") + 1]))["mcpServers"]["beta"]
-            job = Job.query.filter_by(tool_token_hash=_sha256(cfg["headers"]["Authorization"][7:])).one()
-            seen["tools"] = {t["name"] for t in bt2.tool_list(job)}
-            seen["status"] = bt2.call(job, "status", {})
-            seen["run"] = bt2.call(job, "run", {"command": "rm -rf /"})
-            seen["env"] = bt2.call(job, "read_file", {"path": ".env"})
-            seen["seed"] = bt2.call(job, "save_recipe", {"steps": ["php artisan db:seed --force"]})
-            bt2.call(job, "save_recipe", {"steps": ["backend/venv/bin/pip install -q -r backend/requirements.txt",
-                                                     "cd web && npm ci && npm run build", "@publish web/dist"]})
-            ev = {"type": "result", "subtype": "success", "is_error": False, "result": "Uses live's backend/venv.", "session_id": "s",
-                  "total_cost_usd": 0.05, "num_turns": 3, "usage": {}}
-            self.stdout, self.stderr, self.returncode = iter([_json.dumps(ev) + "\n"]), io.StringIO(""), 0
-
-    cc_mod._spawn = lambda args, cwd, env: FakeLiveSteps(args, cwd, env)
-    keep_recipe = newp.live_recipe
-    ok(dv.post(f"/projects/{newp.id}/jobs/live_steps").status_code in (403, 404), "developers can't start Claude on the live steps")
-    c.post(f"/projects/{newp.id}/jobs/live_steps")
-    j = Job.query.order_by(Job.id.desc()).first()
-    db.session.refresh(newp)
-    ok(j.kind == "live_steps" and j.state == "done" and newp.live_recipe.endswith("@publish web/dist") and j.context is None
-       and j.tool_token_hash is None, "Claude writes and saves the live release steps")
-    ok(seen["tools"] == {"status", "read_file", "save_recipe", "report_problem"} and seen["run"][1] and seen["env"][1] and seen["seed"][1]
-       and "python_venvs" in seen["status"][0], "for live steps Claude can only read and save — it runs nothing, sees no settings, can't seed")
-    newp.live_recipe = keep_recipe
-    db.session.commit()
-    cc_mod._spawn = prev_spawn
-    before_rel = newp.env("live").current_release
-
-    # the new release doesn't answer → straight back
-    ch7.status = "approved"
-    db.session.commit()
-    health_answer[0] = (False, 502)
-    v2_scripts.clear()
-    n_err = Alert.query.filter_by(kind="error").count()
-    _t.sleep(1.1)
-    c.post(f"/projects/{newp.id}/go-live", data={"code": fresh_code()})
-    j = Job.query.order_by(Job.id.desc()).first()
-    db.session.refresh(newp)
-    ok(j.state == "failed" and "switched straight back" in j.note and newp.env("live").current_release == before_rel
-       and len([sc for sc in v2_scripts if "mv -T" in sc]) == 2 and Alert.query.filter_by(kind="error").count() == n_err + 1,
-       "a release that doesn't answer is switched straight back, with an alert")
-    health_answer[0] = (True, 200)
-
-    keep_h = health_answer[0]
-    health_answer[0] = (True, 403)
-    ok(rel_mod._health(newp.env("live"))[0] is False, "a 403 on the home page after a switch counts as down, not up")
-    health_answer[0] = keep_h
-
-    # the owner sets the steps for a new live release
-    ok(dv.post(f"/projects/{newp.id}/live-steps", data={"live_recipe": "x"}).status_code in (403, 404), "developers can't change live steps")
-    c.post(f"/projects/{newp.id}/live-steps", data={"live_recipe": "pip install -r r.txt\n@publish ../other"})
-    db.session.refresh(newp)
-    ok("@publish ../other" not in (newp.live_recipe or ""), "live steps that publish outside the release are refused")
-    keep_recipe = newp.live_recipe
-    c.post(f"/projects/{newp.id}/live-steps", data={"live_recipe": "backend/venv/bin/pip install -r backend/requirements.txt\r\n@publish web/dist"})
-    db.session.refresh(newp)
-    ok(newp.live_recipe == "backend/venv/bin/pip install -r backend/requirements.txt\n@publish web/dist", "the owner saves the live release steps")
-    newp.live_recipe = keep_recipe
+    lv.db_name, lv.restart_units, newp.db_engine = keep_live_db, [], "mysql"
     db.session.commit()
     from app.blueprints.projects import DB_RE
     ok(DB_RE.match("sqlite:backend/crm.db") and DB_RE.match("shop_live") and not DB_RE.match("sqlite:/etc/x") and not DB_RE.match("a b"),
        "a database is a name or sqlite:<file inside the folder>")
+    ch7.status = "approved"
+    db.session.commit()
+    remote_mod.run = fake_run
 
-    # files changed directly in the live release → Go Live refuses
-    v2["edited"] = "app/Http/Controllers/HomeController.php"
-    c.post(f"/projects/{newp.id}/go-live", data={"code": fresh_code()})
-    j = Job.query.order_by(Job.id.desc()).first()
-    ok(j.state == "failed" and "changed directly" in j.note, "direct edits in the live release block Go Live v2")
-    v2["edited"] = ""
+    # ---------- live folder vs GitHub main: drift panel, Commit & push, Update live (real git, scripts run locally) ----------
+    from app import livesync
+    live_dir = os.path.join(TMP, "livecopy")
+    subprocess.run(["git", "clone", "-q", "--branch", "main", bare, live_dir], check=True, capture_output=True, env=env)
+    main_before_live = subprocess.run(["git", "--git-dir", bare, "rev-parse", "main"], capture_output=True, text=True).stdout.strip()
 
-    # Rollback v2: back to the previous release in an instant
-    cur, target = gl_mod.rollback_target(newp)
-    v2_scripts.clear()
-    c.post(f"/projects/{newp.id}/rollback", data={"deployment": str(cur.id), "code": fresh_code()})
-    j = Job.query.order_by(Job.id.desc()).first()
-    db.session.refresh(newp)
-    ok(j.kind == "rollback" and j.state == "done" and newp.env("live").current_release == target and target != cur.commit
-       and any("mv -T" in sc and target in sc for sc in v2_scripts), "Rollback v2 switches back to the previous release")
+    def local_run(server, script, timeout=900):
+        r = subprocess.run(["bash", "-c", script], capture_output=True, text=True, env=env)
+        return r.returncode, r.stdout + r.stderr
 
-    # rehearsal: Go Live with the current code on a copy site, then back — only for "<slug>-rehearsal" projects
-    from app import jobs as jobs_mod
-    rj2 = Job(project_id=newp.id, kind="go_live", by_user_id=owner.id)
-    db.session.add(rj2)
-    db.session.commit()
-    jobs_mod.start(rj2.id, rel_mod.run_rehearse_go_live, background=False)
-    db.session.refresh(rj2)
-    ok(rj2.state == "failed" and "Only a rehearsal project" in rj2.note, "the Go Live rehearsal refuses a real project")
-    real_slug, before_rel = newp.slug, newp.env("live").current_release
-    newp.slug = real_slug + "-rehearsal"
-    db.session.commit()
-    v2_scripts.clear()
-    _t.sleep(1.1)
-    rj3 = Job(project_id=newp.id, kind="go_live", by_user_id=owner.id)
-    db.session.add(rj3)
-    db.session.commit()
-    jobs_mod.start(rj3.id, rel_mod.run_rehearse_go_live, background=False)
-    db.session.refresh(rj3)
-    db.session.refresh(newp)
-    sw = [sc for sc in v2_scripts if "mv -T" in sc]
-    ok(rj3.state == "done" and "Rehearsal OK" in rj3.note and newp.env("live").current_release == before_rel and len(sw) == 2
-       and before_rel in sw[1], "the Go Live rehearsal builds + switches a new release, then rolls back to the one before")
-    pr = [sc for sc in v2_scripts if "ls -1dt r*/" in sc]
-    ok(pr and f"grep -vxF {before_rel}/" in pr[-1] and "tail -n +3" in pr[-1], "old releases are pruned, never the one that is live")
-    newp.slug = real_slug
-    db.session.commit()
+    def bare_main(path):
+        return subprocess.run(["git", "--git-dir", bare, "show", f"main:{path}"], capture_output=True, text=True).stdout
+
+    def last_job():
+        db.session.expire_all()
+        return Job.query.order_by(Job.id.desc()).first()
+
     lv = newp.env("live")
-    lv.layout, lv.current_release, lv.shared = "", None, []
-    newp.live_recipe = ""
+    keep = (lv.deploy_path, lv.db_name, newp.deploy_script, lv.watch_until)
+    lv.deploy_path, lv.db_name = live_dir, ""
+    newp.deploy_script = "git fetch --quiet origin {branch}\ngit checkout --quiet -B {branch} origin/{branch}"
+    db.session.commit()
+    remote_mod.run = local_run
+
+    st = livesync.refresh(newp)
+    ok(st["files"] == [] and st["new"] == [] and st["ahead"] == 0 and st["behind"] == 0 and st["fetch_ok"], "a live folder equal to main shows no difference")
+    r = c.get(f"/projects/{newp.id}")
+    ok(b"same code as main" in r.data and b'disabled title="Live already has everything main has"' in r.data,
+       "live equal to main: the update button is disabled")
+
+    open(os.path.join(live_dir, "README.md"), "w").write("edited on the server by FTP\n")
+    open(os.path.join(live_dir, "upload.txt"), "w").write("new file from FTP\n")
+    st = livesync.refresh(newp)
+    ok(st["files"] == ["README.md"] and st["new"] == ["upload.txt"], "edited and new files in live are noticed")
+    r = c.get(f"/projects/{newp.id}")
+    ok(b"Live differs from main" in r.data and b"Commit &amp; push to GitHub" in r.data and b"upload.txt" in r.data, "the project page says live differs and offers Commit & push")
+    ok(dv.post(f"/projects/{newp.id}/live-push", data={"code": "1"}).status_code in (403, 404), "developers can't Commit & push")
+    c.post(f"/projects/{newp.id}/live-push", data={"code": "000000"})
+    ok(bare_main("upload.txt") == "", "a wrong authenticator code pushes nothing")
+
+    open(os.path.join(live_dir, "server.pem"), "w").write("-----BEGIN KEY-----\n")
+    c.post(f"/projects/{newp.id}/live-push", data={"code": fresh_code()})
+    j = last_job()
+    ok(j.kind == "live_push" and j.state == "failed" and "secret" in j.note and bare_main("README.md") == "Hello CRM v3\n",
+       "a secret-looking file stops the commit; GitHub is untouched")
+    os.remove(os.path.join(live_dir, "server.pem"))
+
+    c.post(f"/projects/{newp.id}/live-push", data={"code": fresh_code()})
+    j = last_job()
+    ok(j.state == "done" and bare_main("README.md") == "edited on the server by FTP\n" and bare_main("upload.txt") == "new file from FTP\n",
+       "Commit & push puts the live edits on GitHub main")
+    ok("Live folder edits committed" in subprocess.run(["git", "--git-dir", bare, "log", "-1", "--format=%s", "main"], capture_output=True, text=True).stdout
+       and ActivityLog.query.filter_by(action="Live folder committed", project_id=newp.id).count() == 1, "the commit is labelled and logged")
+    db.session.refresh(lv)
+    ok(lv.drift["files"] == [] and lv.drift["new"] == [] and lv.drift["ahead"] == 0 and lv.drift["behind"] == 0, "live equals main again afterwards")
+
+    # a developer pushes to main; live gets an edit too → live commits go through a side branch and are merged here
+    run_git("fetch", "-q", bare, "main:devmain")
+    run_git("checkout", "-q", "devmain")
+    open(os.path.join(seed_dir, "dev3.txt"), "w").write("developer v1\n")
+    run_git("add", "dev3.txt")
+    run_git("commit", "-qm", "dev: dev3")
+    run_git("push", "-q", bare, "devmain:main")
+    open(os.path.join(live_dir, "live2.txt"), "w").write("live only\n")
+    st = livesync.refresh(newp)
+    ok(st["new"] == ["live2.txt"] and st["behind"] == 1, "a new file in live and a newer main are both seen")
+    c.post(f"/projects/{newp.id}/live-update", data={"code": fresh_code()})
+    j = last_job()
+    ok(j.state == "failed" and "Commit & push" in j.note, "Update live refuses while live has edits GitHub lacks (they would be lost)")
+    c.post(f"/projects/{newp.id}/live-push", data={"code": fresh_code()})
+    j = last_job()
+    ok(j.state == "done" and bare_main("live2.txt") == "live only\n" and bare_main("dev3.txt") == "developer v1\n",
+       "when main moved too, live's work is merged into main — nothing lost on either side")
+    ok(subprocess.run(["git", "--git-dir", bare, "rev-parse", "--verify", "-q", "refs/heads/dashboard/live-edits"], capture_output=True).returncode != 0,
+       "the side branch is removed after the merge")
+    db.session.refresh(lv)
+    ok(lv.drift["ahead"] == 0 and lv.drift["behind"] >= 1, "afterwards live only lacks the newer main")
+
+    # Update live from main: deploys by git pull in the live folder, records a deployment
+    deps = Deployment.query.filter_by(project_id=newp.id).count()
+    c.post(f"/projects/{newp.id}/live-update", data={"code": fresh_code()})
+    j = last_job()
+    head_live = subprocess.run(["git", "rev-parse", "HEAD"], cwd=live_dir, capture_output=True, text=True).stdout.strip()
+    head_main = subprocess.run(["git", "--git-dir", bare, "rev-parse", "main"], capture_output=True, text=True).stdout.strip()
+    ok(j.state == "done" and head_live == head_main and os.path.exists(os.path.join(live_dir, "dev3.txt")), "Update live from main brings live to main with git pull")
+    d2 = Deployment.query.filter_by(project_id=newp.id).order_by(Deployment.id.desc()).first()
+    ok(Deployment.query.filter_by(project_id=newp.id).count() == deps + 1 and d2.change_ids == [] and "Update from main" in d2.note, "the update is recorded as a deployment")
+    deps += 1
+    c.post(f"/projects/{newp.id}/live-update", data={"code": fresh_code()})
+    j = last_job()
+    ok(j.state == "done" and "nothing to do" in (j.note + j.output) and Deployment.query.filter_by(project_id=newp.id).count() == deps,
+       "when live already equals main there is nothing to deploy")
+
+    # conflict: developer changes dev3.txt on main while live edits it by hand → stops, nothing lost, main untouched
+    run_git("checkout", "-q", "devmain")
+    run_git("fetch", "-q", bare, "main")
+    run_git("reset", "-q", "--hard", "FETCH_HEAD")
+    open(os.path.join(seed_dir, "dev3.txt"), "w").write("developer v2\n")
+    run_git("commit", "-qam", "dev: dev3 v2")
+    run_git("push", "-q", bare, "devmain:main")
+    open(os.path.join(live_dir, "dev3.txt"), "w").write("live v2\n")
+    before = subprocess.run(["git", "--git-dir", bare, "rev-parse", "main"], capture_output=True, text=True).stdout
+    c.post(f"/projects/{newp.id}/live-push", data={"code": fresh_code()})
+    j = last_job()
+    ok(j.state == "failed" and "conflict" in j.note and subprocess.run(["git", "--git-dir", bare, "rev-parse", "main"], capture_output=True, text=True).stdout == before
+       and subprocess.run(["git", "--git-dir", bare, "show", "dashboard/live-edits:dev3.txt"], capture_output=True, text=True).stdout == "live v2\n",
+       "conflicting live edits stop the merge; main is untouched and the edits are kept on a side branch")
+
+    # put the shared test repo and the project back as they were
+    run_git("checkout", "-q", "-f", "main")
+    run_git("branch", "-q", "-D", "devmain")
+    subprocess.run(["git", "--git-dir", bare, "update-ref", "refs/heads/main", main_before_live], check=True)
+    subprocess.run(["git", "--git-dir", bare, "update-ref", "-d", "refs/heads/dashboard/live-edits"], check=True)
+    lv.deploy_path, lv.db_name, newp.deploy_script, lv.watch_until = keep
+    lv.drift = lv.drift_at = None
     db.session.commit()
     remote_mod.run = fake_run
 

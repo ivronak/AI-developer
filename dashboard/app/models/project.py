@@ -94,6 +94,8 @@ class Environment(TimestampMixin, db.Model):
     restart_units = db.Column(db.JSON, nullable=False, default=list)   # systemd services to restart after a switch
     current_release = db.Column(db.String(40))                         # folder name under <site>/releases
     git_checked_at = db.Column(db.DateTime)
+    drift = db.Column(db.JSON)                                         # live folder vs GitHub: {head, ahead, behind, files, fetch_ok}
+    drift_at = db.Column(db.DateTime)
     site_user = db.Column(db.String(64))                               # Linux user of a managed beta's website
     db_user = db.Column(db.String(64))                                 # managed beta: its own MySQL user (only this beta's database)
     db_password_enc = db.Column(db.Text, nullable=False, default="", server_default="")
