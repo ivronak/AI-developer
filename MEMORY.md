@@ -417,3 +417,5 @@ Big picture lives in `TRACKER.md` (status, decisions) and `CHANGES.md` (the "zer
   `git pull` deploy, health, Deployment row). Go Live's drift check now also refuses unpushed commits. 423 checks.
   The aided app's own folder is not a git checkout, so this panel can't be used on it yet.
 
+
+- 2026-11-05 · Project details: Hosting select + Server text merged into one Server dropdown (servers from Settings + cPanel) · projects.py save_details, detail.html · 427 flow checks · next: deploy.

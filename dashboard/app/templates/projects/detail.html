@@ -496,10 +496,12 @@
         <div class="field"><label for="d-beta">Beta (test site) address <span class="hint">(leave empty — Claude makes it)</span></label><input id="d-beta" name="beta_url" value="{{ beta.url if beta else '' }}" placeholder="{{ beta_names.host }}"></div>
       </div>
       <div class="form-row two">
-        <div class="field"><label for="d-host">Hosting</label><select id="d-host" name="host_type">
-          <option value="vps"{% if p.host_type == "vps" %} selected{% endif %}>VPS</option>
-          <option value="cpanel"{% if p.host_type == "cpanel" %} selected{% endif %}>cPanel</option></select></div>
-        <div class="field"><label for="d-server">Server</label><input id="d-server" name="server" value="{{ (live.server_host or '') if live else '' }}" placeholder="vps-1.company.com"></div>
+        {% set cur = "cpanel" if p.host_type == "cpanel" else ("s:" ~ live.server_id if live and live.server_id else ("keep" if live and live.server_host else "")) %}
+        <div class="field"><label for="d-server">Server <span class="hint">(hosting + server name)</span></label><select id="d-server" name="server">
+          <option value=""{% if cur == "" %} selected{% endif %}>— not set —</option>
+          {% for s in servers %}<option value="s:{{ s.id }}"{% if cur == "s:" ~ s.id %} selected{% endif %}>VPS · {{ s.name }}</option>{% endfor %}
+          <option value="cpanel"{% if cur == "cpanel" %} selected{% endif %}>cPanel</option>
+          {% if cur == "keep" %}<option value="keep" selected>{{ live.server_host }} (not in Servers list)</option>{% endif %}</select></div>
       </div>
       <div class="form-row two">
         <div class="field"><label for="d-repo">GitHub repo</label><input id="d-repo" name="repo" class="mono" value="{{ p.github_repo or '' }}" placeholder="owner/repo"></div>
@@ -616,7 +618,7 @@
       <section class="panel-box"><h2><span class="h-ic" style="--h:{{ hue(p) }}">{{ icon('github') }}</span>Project</h2>
         <dl class="kv">
           <dt>GitHub</dt><dd class="mono">{{ p.github_repo or "—" }}</dd>
-          <dt>Hosting</dt><dd>{{ "VPS" if p.host_type == "vps" else "cPanel" }} · <span class="mono">{{ live.server_host if live else "—" }}</span></dd>
+          <dt>Server</dt><dd>{{ "cPanel" if p.host_type == "cpanel" else "VPS" }} · <span class="mono">{{ live.server_host if live and live.server_host else "—" }}</span></dd>
           <dt>Beta</dt><dd class="mono">{{ beta.url }} · branch {{ beta.branch }}</dd>
           <dt>Live</dt><dd class="mono">{{ live.url if live else "—" }} · branch {{ live.branch if live else "main" }}</dd>
           <dt>Developers</dt><dd>{% for u in devs %}{{ u.name }}{% if not u.is_active %} (off){% endif %}{% if not loop.last %}, {% endif %}{% else %}None{% endfor %}</dd>

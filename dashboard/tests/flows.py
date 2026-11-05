@@ -1669,6 +1669,23 @@ with app.app_context():
                                              "tech": "Laravel", "host_type": "vps", "repo": "company-org/new-crm", "active": "1"})
     ok(Job.query.filter_by(project_id=q.id).count() == n_jobs, "a project that already has a beta doesn't get another one")
 
+    # one Server dropdown = hosting + server name
+    from app.models import Server as _Srv
+    _s = _Srv.query.first()
+    pg = c.get(f"/projects/{q.id}").data
+    ok(b'name="server"' in pg and b'name="host_type"' not in pg and b'value="cpanel"' in pg, "Project details has one Server dropdown (no separate Hosting)")
+    base = {"name": "Shop", "client": "Client S", "live_url": "shop.example.com", "beta_url": "", "tech": "Laravel", "repo": "company-org/new-crm", "active": "1"}
+    if _s is not None:
+        c.post(f"/projects/{q.id}/details", data={**base, "server": f"s:{_s.id}"})
+        db.session.refresh(q)
+        ok(q.host_type == "vps" and q.env("live").server_id == _s.id and q.env("live").server_host == _s.name, "picking a server sets hosting VPS + server")
+    c.post(f"/projects/{q.id}/details", data={**base, "server": "cpanel"})
+    db.session.refresh(q)
+    ok(q.host_type == "cpanel" and q.env("live").server_host == "cPanel", "picking cPanel sets hosting cPanel")
+    c.post(f"/projects/{q.id}/details", data={**base, "server": "keep"})
+    db.session.refresh(q)
+    ok(q.host_type == "cpanel" and q.env("live").server_host == "cPanel", "'keep' leaves hosting as it is")
+
     # Step 5: a repo that is renamed / transferred stays the same project (GitHub's id), never "new" or "missing"
     from app import gitcheck
     gp = Project(name="Moved", slug="moved", client_name="Client M2", github_repo="company-org/clinic-app", github_repo_id=987654)

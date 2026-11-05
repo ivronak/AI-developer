@@ -12,7 +12,7 @@ from app import health
 from app.auth import log, owner_required, project_or_404
 from app.extensions import db
 from app.models import Backup, Change, ChangeAttachment, ChangeMessage, Deployment, Environment, User
-from app.models.project import HOST_TYPES, MESSAGE_MODES, PAYMENT_MODES
+from app.models.project import MESSAGE_MODES, PAYMENT_MODES
 from app.models.setting import get_setting
 
 bp = Blueprint("projects", __name__)
@@ -130,7 +130,6 @@ def save_details(project_id):
     f = request.form
     name, client = (f.get("name") or "").strip(), (f.get("client") or "").strip()
     live_url, beta_url = _url(f.get("live_url")), _url(f.get("beta_url"))
-    host = f.get("host_type") if f.get("host_type") in HOST_TYPES else "vps"
     repo = (f.get("repo") or "").strip().strip("/")
     tech = [t.strip() for t in (f.get("tech") or "").split(",") if t.strip()][:6]
     if not beta_url:                                   # empty = Claude makes it at <project>.beta.ivinfotech.com
@@ -144,19 +143,34 @@ def save_details(project_id):
         return redirect(url_for("projects.detail", project_id=p.id) + "#settings")
     if repo != (p.github_repo or ""):
         p.repo_missing = False
-    p.name, p.client_name, p.host_type, p.tech_stack, p.github_repo = name, client, host, tech, repo or None
+    p.name, p.client_name, p.tech_stack, p.github_repo = name, client, tech, repo or None
     p.is_active = f.get("active") == "1"
     p.monitor_enabled = f.get("watch") == "1"
-    server = (f.get("server") or "").strip()[:190] or None
+    from app.models import Server
+    pick, srv, relabel, host_label = f.get("server"), None, True, None
+    if pick == "cpanel":
+        p.host_type, host_label = "cpanel", "cPanel"
+    elif pick is not None and pick.startswith("s:") and pick[2:].isdigit():
+        srv = db.session.get(Server, int(pick[2:])) or abort(400)
+        p.host_type, host_label = "vps", srv.name
+    elif pick == "":
+        p.host_type = "vps"
+    else:                                               # "keep" (or an older form): leave hosting as it is
+        relabel = False
     for kind, url, branch in (("live", live_url, "main"), ("beta", beta_url, "beta")):
         e = p.env(kind)
         if e is None:
             e = Environment(kind=kind, branch=branch)
             p.environments.append(e)
         e.url = url
-        e.server_host = server
+        if relabel:
+            e.server_host = host_label
+    if srv is not None:
+        p.env("live").server_id = srv.id
+    elif pick == "":
+        p.env("live").server_id = None
     p.needs_setup = False
-    log("Project details", project_id=p.id, details=f"{name} · {client} · {host}")
+    log("Project details", project_id=p.id, details=f"{name} · {client} · {p.host_type}")
     db.session.commit()
     from app.betas import maybe_auto_setup
     if maybe_auto_setup(p, current_user):
