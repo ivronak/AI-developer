@@ -3,13 +3,22 @@
 document.addEventListener("DOMContentLoaded", function () {
   var TABS = ["chat", "changes", "apps", "deploys", "backups", "settings"];
 
-  function setTab(t) {
+  function chatToEnd() {
+    var sc = document.getElementById("chat-scroll");
+    if (sc) sc.scrollTop = sc.scrollHeight;
+  }
+
+  function setTab(t, jump) {
     if (TABS.indexOf(t) === -1) t = "chat";
     var b = document.querySelectorAll("[data-tab]");
     for (var i = 0; i < b.length; i++) b[i].setAttribute("aria-selected", String(b[i].getAttribute("data-tab") === t));
     var p = document.querySelectorAll("[data-panel]");
     for (var j = 0; j < p.length; j++) p[j].hidden = p[j].getAttribute("data-panel") !== t;
     try { history.replaceState(null, "", window.location.pathname + window.location.search + "#" + t); } catch (e) {}
+    if (t === "chat") {
+      chatToEnd();
+      if (jump) { var tb = document.getElementById("tabs"); if (tb) tb.scrollIntoView({ block: "start" }); }
+    }
   }
 
   function setHint() {
@@ -37,6 +46,7 @@ document.addEventListener("DOMContentLoaded", function () {
     var dbgBox = document.getElementById("cc-debug");
     if (dbgBox && dbgBox.checked !== (dbg === "1")) { dbgBox.checked = dbg === "1"; dbgBox.dispatchEvent(new Event("change")); }
     setHint();
+    chatToEnd();
     form.classList.toggle("is-locked", !!lock);
     var note = document.getElementById("composer-locked");
     note.hidden = !lock; note.textContent = lock;
@@ -58,7 +68,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   document.addEventListener("click", function (e) {
     var t = e.target.closest("[data-tab]");
-    if (t) { setTab(t.getAttribute("data-tab")); return; }
+    if (t) { setTab(t.getAttribute("data-tab"), true); return; }
     var p = e.target.closest("[data-pick]");
     if (p) { pick(p.getAttribute("data-pick")); return; }
     var cp = e.target.closest("[data-copy-v]");

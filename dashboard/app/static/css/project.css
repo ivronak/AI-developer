@@ -222,7 +222,7 @@
 .ask-root .hint { margin: 0; }
 .ask-code-full { max-height: none; }
 /* chat screenshots: previews, and the drop overlay while image files are dragged over the page */
-.composer { position: sticky; bottom: 12px; z-index: 20; box-shadow: 0 0 0 12px var(--bg), 0 -6px 18px 12px var(--bg); }
+.composer { position: relative; flex: none; }
 .composer { border-radius: 22px; padding: 10px 12px 8px; background: var(--surface-2, var(--surface)); }
 .composer textarea { resize: none; min-height: 44px; max-height: 40vh; padding: 8px 6px; line-height: 1.45; }
 .composer .composer-bar { flex-wrap: nowrap; align-items: flex-end; }
@@ -290,3 +290,9 @@
 .mpick-pill { height: 24px; padding: 0 9px; border: 1px solid var(--line-strong, var(--line)); border-radius: 999px; background: transparent; color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
 .mpick-pill[aria-pressed="true"] { background: var(--accent, #4a8cf7); border-color: transparent; color: #fff; }
 @media (max-width: 640px) { .composer .cc-usage { display: none; } }
+
+/* the chat is its own scrolling pane; the message box stays at the bottom of it */
+#tabs { scroll-margin-top: 72px; }
+.chat-panel { display: flex; flex-direction: column; gap: 10px; height: max(420px, calc(100dvh - 150px)); }
+.chat-panel > .pick { flex: none; }
+.chat-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: grid; gap: 14px; align-content: start; padding: 2px 4px 2px 0; }

@@ -209,7 +209,7 @@
   </nav>
 
   {# ---------- Chat ---------- #}
-  <section class="tab-panel" data-panel="chat">
+  <section class="tab-panel chat-panel" data-panel="chat">
     <div class="pick" role="group" aria-label="Pick a change">
       <button type="button" data-pick="new" data-lock="" aria-pressed="{{ 'false' if current else 'true' }}">{{ icon('plus') }}<span class="t">New change</span></button>
       {% for c in open_changes %}{% set si = status_info(c) %}
@@ -217,6 +217,7 @@
       {% endfor %}
     </div>
 
+    <div class="chat-scroll" id="chat-scroll">
     <div data-change="new" {% if current %}hidden{% endif %}>
       {% if p.ai_engine == "claude_code" %}<p class="hint">{{ icon('activity') }} This project uses <strong>Claude Code on the server</strong> — one ongoing session that remembers earlier work.</p>{% endif %}
       <p class="intro">Describe the change the client asked for. Add a screenshot if it helps. Claude makes it on <strong>its own branch, on beta only</strong>, and runs the tests — live is never touched.</p>
@@ -350,6 +351,8 @@
         </div>
       </div>
     {% endfor %}
+
+    </div>
 
     <form class="composer" id="composer"{% if setup.locked %} hidden style="display:none"{% endif %} method="post" action="{{ url_for('projects.chat', project_id=p.id) }}" enctype="multipart/form-data" data-max-images="{{ max_images }}" data-max-mb="{{ max_image_mb }}">
       <div class="drop-hint" id="drop-hint" hidden aria-hidden="true">Drop images here to attach them</div>
