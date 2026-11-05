@@ -205,3 +205,4 @@ Everything decided after the PRD that changes what it says. The PRD stays the ba
 - 2026-11-05 · Chat layout: change card stays on top (own box), messages in their own bordered scroll box (.thread-box), composer below · 461 checks · no migration.
 - 2026-11-05 · Chat: change card no longer scrolls; pane height grows to fit card + message box + composer (fitChat) · 461 checks.
 - 2026-11-05 · Chat: message box min 340px, input min 60px · 461 checks.
+- 2026-11-05 · Chat: message box height doubled (fitChat adds the box height again) · 461 checks.

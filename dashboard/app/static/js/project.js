@@ -10,7 +10,9 @@ document.addEventListener("DOMContentLoaded", function () {
     var card = panel.querySelector("[data-change]:not([hidden]) > .ccard"), pk = panel.querySelector(".pick"), cp = document.getElementById("composer");
     /* never smaller than the card + a usable message box + the composer; on a short screen the page scrolls instead */
     var need = (pk ? pk.offsetHeight : 0) + (card ? card.offsetHeight : 0) + 340 + (cp ? cp.offsetHeight : 0) + 40;
-    panel.style.setProperty("--chat-h", Math.max(360, need, window.innerHeight - 72 - tb.offsetHeight - 14 - 14) + "px");
+    var base = Math.max(360, need, window.innerHeight - 72 - tb.offsetHeight - 14 - 14);
+    var box = base - (need - 340);                       /* the message box's height today; the pane grows by that much again (2x) */
+    panel.style.setProperty("--chat-h", (base + Math.max(box, 340)) + "px");
   }
   window.addEventListener("resize", fitChat);
 
