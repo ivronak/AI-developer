@@ -368,32 +368,6 @@ You have up to {STEPS} steps (or until the cost limit for one run): spend them o
 checked it, and anything still unclear.""".replace("{STEPS}", str(DEBUG_TURNS))
 
 
-def _keep_notes(change, project, learned, notes_at):
-    """Claude's rewrite of the project notes: kept (with the previous version), logged with its author, and flagged to the owner when
-    it ADDS a link or a command word. Skipped when the owner edited the notes while the run worked, or when the rewrite looks like an
-    accident (the template line echoed back, or far shorter than the notes it replaces)."""
-    from app import project_notes
-    from app.alerts import raise_alert
-    from app.models import Project
-    row = db.session.query(Project.cc_notes_at, Project.cc_notes).filter_by(id=project.id).one()
-    if row.cc_notes_at != notes_at:
-        log("Project notes", project_id=project.id, details=f"Change #{change.id}: Claude's rewrite was not saved — the notes were edited while it worked")
-        return
-    old = project.cc_notes or ""
-    ok, why = project_notes.accept(learned, old)
-    if not ok:
-        log("Project notes", project_id=project.id, details=f"Change #{change.id}: Claude's rewrite was ignored — {why}")
-        return
-    flags = project_notes.suspicious_additions(learned, old)
-    if project_notes.save(project, learned, by="Claude"):
-        log("Project notes", project_id=project.id, details=f"Change #{change.id}: updated by Claude ({len(learned)} characters)"
-                                                            + (f" — NEW links / commands: {', '.join(flags)}" if flags else ""))
-        if flags:
-            db.session.commit()
-            raise_alert("approval", f"{project.name}: Claude added a link or command to the project notes ({', '.join(flags)[:120]}) — "
-                                    "please read them (project → Settings → Project notes).", project)
-
-
 def _save_work_in_progress(change):
     """A run that stopped at a limit leaves edits in the checkout, and the next run starts with `git reset --hard` from the remote
     branch. Push them first, so Continue picks them up. Returns the sentence to add to the owner's note ('' when nothing was saved)."""
@@ -475,8 +449,7 @@ def _run_claude_code(change, project, root, model, max_turns, max_usd, effort=No
     account = cc_logins.pick(change.agent_account_id)
     launch = (cc_models.launch_value(model, cc_logins.models_for(account)) if change.agent_model
               else model)     # the picker's "Default" → the model it stands for (in the picked account's own list)
-    notes_at = project.cc_notes_at                    # to notice the owner editing the notes while this run works
-    try:       # the project's notes (its CLAUDE.md) go to Claude with the rules; a problem here must never stop a run
+    try:       # the project's facts + how its memory is kept go to Claude with the rules; a problem here must never stop a run
         rules = cc.RULES + "\n\n" + project_notes.block(project, root)
     except Exception:
         current_app.logger.error("project notes failed:\n%s", traceback.format_exc())
@@ -527,11 +500,8 @@ def _run_claude_code(change, project, root, model, max_turns, max_usd, effort=No
                            + (usage.get("cache_creation_input_tokens") or 0),
                            output_tokens=usage.get("output_tokens") or 0, cost_usd=cost))
     change.agent_cost_usd = Decimal(change.agent_cost_usd or 0) + cost
-    text, learned = project_notes.extract(out["text"])      # the notes block is for the dashboard, not for the owner's note
-    if learned:
-        _keep_notes(change, project, learned, notes_at)
     db.session.commit()
-    return text
+    return out["text"]
 
 
 def run(change_id):

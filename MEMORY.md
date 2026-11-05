@@ -423,3 +423,5 @@ Big picture lives in `TRACKER.md` (status, decisions) and `CHANGES.md` (the "zer
 - 2026-11-05 · Project Settings tab: AI engine section removed (UI only, route kept) · detail.html · 427 checks.
 
 - 2026-11-05 · Engine picked in chat composer (default Claude Code) · detail.html, project.js, projects.py (chat send sets p.ai_engine) · 428 checks.
+
+- 2026-11-05 · Project memory (auto / pick md files) replaces Project notes · project_notes.py (block, memory_text), github.list_doc_files, projects.save_memory + memory-files, migration c3e5a7b9d1f2 · 434 checks · next: deploy, try on Ikonevents.

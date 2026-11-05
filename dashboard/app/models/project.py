@@ -43,10 +43,8 @@ class Project(TimestampMixin, db.Model):
     beta_recipe = db.Column(db.Text, nullable=False, default="", server_default="")   # steps Claude found to run this app (managed beta)
     mobile_apps = db.Column(db.JSON, nullable=False, default=list, server_default="[]")   # Flutter app folders in the repo: [{"dir", "name"}]
     live_recipe = db.Column(db.Text, nullable=False, default="", server_default="")   # steps to make a new LIVE release work (Go Live v2)
-    cc_notes = db.Column(db.Text, nullable=False, default="", server_default="")      # "what earlier runs learned" — the project's CLAUDE.md (project_notes.py)
-    cc_notes_at = db.Column(db.DateTime)                                              # when the text last changed
-    cc_notes_prev = db.Column(db.Text, nullable=False, default="", server_default="")  # the version before the last change (the owner can restore it)
-    cc_notes_by = db.Column(db.String(20), nullable=False, default="", server_default="")   # "Claude" or "Owner": who wrote the current text
+    memory_mode = db.Column(db.String(8), nullable=False, default="auto", server_default="auto")   # auto: Claude manages CLAUDE.md / MEMORY.md | files: the owner's picks
+    memory_files = db.Column(db.JSON, nullable=False, default=list, server_default="[]")   # repo paths of the md files Claude keeps as memory (mode files)
 
     environments = db.relationship("Environment", back_populates="project", cascade="all, delete-orphan")
     members = db.relationship("ProjectMember", back_populates="project", cascade="all, delete-orphan")

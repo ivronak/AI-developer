@@ -968,6 +968,22 @@ with app.app_context():
     pg = c.get(f"/projects/{newp.id}").data
     ok(b'id="ai-engine"' not in pg and b'name="engine"' in pg and b'<option value="claude_code" selected>' in pg,
        "engine is picked in the chat (Claude Code by default), no AI engine section in Settings")
+    from app import github as _gh
+    _real = _gh.list_doc_files
+    _gh.list_doc_files = lambda repo, branch: ["CLAUDE.md", "docs/PRD.md"]
+    ok(c.get(f"/projects/{newp.id}/memory-files").get_json()["files"] == ["CLAUDE.md", "docs/PRD.md"], "memory picker lists the repo's md files")
+    _gh.list_doc_files = _real
+    ok(b'id="project-memory"' in pg and b'id="project-notes"' not in pg and b'value="files"' in pg, "Project memory panel replaces Project notes")
+    r = c.post(f"/projects/{newp.id}/memory", data={"mode": "files"}, follow_redirects=True)
+    db.session.refresh(newp)
+    ok(newp.memory_mode == "auto" and b"Tick at least one file" in r.data, "picking 'files' with none ticked is refused")
+    c.post(f"/projects/{newp.id}/memory", data={"mode": "files", "files": ["docs/PRD.md", "../bad.md", "CLAUDE.md"]})
+    db.session.refresh(newp)
+    ok(newp.memory_mode == "files" and newp.memory_files == ["docs/PRD.md", "CLAUDE.md"], "owner picks memory files (unsafe paths dropped)")
+    ok(dv.post(f"/projects/{newp.id}/memory", data={"mode": "auto"}).status_code == 403, "developers can't change project memory")
+    c.post(f"/projects/{newp.id}/memory", data={"mode": "auto"})
+    db.session.refresh(newp)
+    ok(newp.memory_mode == "auto" and newp.memory_files == [], "back to 'Claude manages it'")
 
     # ---------- client approval link (Step 9) ----------
     from app.models import Approval

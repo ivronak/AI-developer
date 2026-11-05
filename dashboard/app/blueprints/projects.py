@@ -713,39 +713,39 @@ def save_engine(project_id):
     return redirect(url_for("projects.detail", project_id=p.id) + "#settings")
 
 
-@bp.post("/projects/<int:project_id>/notes")
+@bp.post("/projects/<int:project_id>/memory")
 @login_required
 @owner_required
-def save_notes(project_id):
-    """The project's notes (its CLAUDE.md): what Claude has learned. Claude keeps them up to date; only the owner edits, restores the
-    previous version or clears them — they steer every run, so developers can't write them."""
+def save_memory(project_id):
+    """How Claude Code keeps this project's memory: it manages md files in the repo itself (default), or keeps the files the owner picked."""
     from app import project_notes
     p = project_or_404(project_id)
-    back = redirect(url_for("projects.detail", project_id=p.id) + "#project-notes")
-    if p.ai_engine != "claude_code":
-        flash("Project notes are used by Claude Code on the server — switch this project's AI engine first.", "bad")
+    mode = "files" if request.form.get("mode") == "files" else "auto"
+    files = project_notes.memory_paths(request.form.getlist("files")) if mode == "files" else []
+    back = redirect(url_for("projects.detail", project_id=p.id) + "#project-memory")
+    if mode == "files" and not files:
+        flash("Tick at least one file, or choose “Claude manages it”.", "bad")
         return back
-    if Change.query.filter(Change.project_id == p.id, Change.agent_state.in_(("queued", "working"))).first():
-        flash("Claude is working on this project — change the notes when it has finished.", "bad")
-        return back
-    action = request.form.get("action") or ("clear" if request.form.get("clear") == "1" else "save")
-    if action == "restore":
-        text, what = p.cc_notes_prev or "", "restored to the previous version"
-        if not text:
-            flash("There is no previous version.", "bad")
-            return back
-    elif action == "clear":
-        text, what = "", "cleared (and a fresh Claude session starts, so nothing of the old notes is remembered)"
-    else:
-        text, what = project_notes.clean((request.form.get("notes") or "")[:project_notes.MAX_FORM]), "edited"
-    changed = project_notes.save(p, text, by="Owner")
-    if action == "clear":
-        p.cc_session_id = None            # the old session still holds every earlier notes block
-    if changed or action == "clear":
-        log("Project settings", project_id=p.id, details=f"Project notes {what}" + (f" ({len(text)} characters)" if text else ""))
-        db.session.commit()
-    flash(f"Project notes {what.split(' (')[0]}." if changed or action == "clear" else "Nothing changed.", "ok")
+    p.memory_mode, p.memory_files = mode, files
+    log("Project settings", project_id=p.id, details="Project memory: " + (", ".join(files) if mode == "files" else "Claude manages it"))
+    db.session.commit()
+    flash("Project memory saved.", "ok")
     return back
+
+
+@bp.get("/projects/<int:project_id>/memory-files")
+@login_required
+@owner_required
+def memory_files(project_id):
+    """The md / txt files of the project's repo, for the memory picker (JSON)."""
+    from app import github
+    p = project_or_404(project_id)
+    if not p.github_repo:
+        return jsonify(error="This project has no GitHub repo yet.", files=[])
+    try:
+        return jsonify(files=github.list_doc_files(p.github_repo, p.default_branch or "main"))
+    except github.GitHubError as e:
+        return jsonify(error=str(e), files=[])
 
 
 @bp.post("/changes/<int:change_id>/continue")

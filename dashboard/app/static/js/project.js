@@ -269,6 +269,35 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
+  /* project memory: "I pick the files" lists the repo's md files (loaded once, the saved picks stay ticked) */
+  var memBox = document.getElementById("memory-picker");
+  if (memBox) {
+    var memLoaded = false, memForm = document.getElementById("project-memory");
+    var memChosen = []; try { memChosen = JSON.parse(memBox.getAttribute("data-chosen") || "[]"); } catch (e) {}
+    var memShow = function () {
+      var files = memForm.querySelector('input[name="mode"][value="files"]').checked;
+      memBox.hidden = !files;
+      if (!files || memLoaded) return;
+      memLoaded = true;
+      var status = document.getElementById("memory-status"), list = document.getElementById("memory-list");
+      var draw = function (paths) {
+        memChosen.forEach(function (p) { if (paths.indexOf(p) === -1) paths.unshift(p); });
+        paths.forEach(function (p) {
+          var l = document.createElement("label"), c = document.createElement("input"), sp = document.createElement("span");
+          l.className = "check"; c.type = "checkbox"; c.name = "files"; c.value = p; c.checked = memChosen.indexOf(p) > -1;
+          sp.className = "mono"; sp.textContent = " " + p;
+          l.appendChild(c); l.appendChild(sp); list.appendChild(l);
+        });
+      };
+      fetch(memBox.getAttribute("data-url"), { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (d) {
+        draw(d.files || []);
+        status.textContent = d.error ? d.error : (list.children.length ? "Tick the files Claude should use as memory." : "The repo has no md files — choose “Claude manages it”.");
+      }).catch(function () { draw([]); status.textContent = "Could not load the file list."; });
+    };
+    memForm.addEventListener("change", memShow);
+    memShow();
+  }
+
   /* the engine picked in the chat decides which pickers show */
   var engineSel = document.getElementById("chat-engine");
   if (engineSel) {

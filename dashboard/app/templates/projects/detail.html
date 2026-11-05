@@ -541,20 +541,20 @@
         </form>
       {% else %}<p class="hint">First set the <strong>live</strong> server and folder (and its database) in “Servers &amp; deploy” below — the beta is made as a copy of live.</p>{% endif %}
     </section>
-    {% if p.ai_engine == "claude_code" %}
-    <form class="panel-box" id="project-notes" method="post" action="{{ url_for('projects.save_notes', project_id=p.id) }}">
+    <form class="panel-box" id="project-memory" method="post" action="{{ url_for('projects.save_memory', project_id=p.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <h2><span class="h-ic" style="--h:150">{{ icon('list') }}</span>Project notes <span class="hint">(this project's CLAUDE.md)</span></h2>
-      <p class="hint">Claude Code reads these notes at the start of every run and rewrites them after every change, so it doesn't start from zero each time. They stay here in the dashboard — not in the repo, so nothing leaks to GitHub or the website. The dashboard adds the project's facts (stack, test command, folders, README) and the recent changes by itself. Only you can edit them.</p>
-      {% if p.cc_notes_by == "Claude" and p.cc_notes_at %}<p class="hint"><strong>Claude rewrote these notes {{ p.cc_notes_at|ago }}.</strong> They steer every later run, so give them a look now and then. A link or command that Claude adds also raises an alert.</p>{% endif %}
-      <div class="field"><label for="cc-notes">What Claude has learned about this project</label>
-        <textarea id="cc-notes" name="notes" rows="12" maxlength="4000" placeholder="Empty — the first change fills it in.">{{ p.cc_notes }}</textarea>
-        <span class="hint">{% if p.cc_notes_at %}Last changed by {{ p.cc_notes_by or "Claude" }} {{ p.cc_notes_at|ago }}.{% else %}Not written yet.{% endif %} At most 4000 characters. Claude treats this as notes, never as orders — your rules in the dashboard always win. Common password and key formats are hidden automatically; don't put any here.</span></div>
-      <div class="chip-row"><button class="btn btn-primary btn-sm" type="submit" name="action" value="save">Save notes</button>
-        {% if p.cc_notes_prev %}<button class="btn btn-sm" type="submit" name="action" value="restore">Restore the previous version</button>{% endif %}
-        {% if p.cc_notes %}<button class="btn btn-danger btn-sm" type="submit" name="action" value="clear" title="Empties the notes and starts a fresh Claude session, because the old session remembers earlier notes">Clear notes</button>{% endif %}</div>
+      <h2><span class="h-ic" style="--h:150">{{ icon('list') }}</span>Project memory <span class="hint">(Claude Code)</span></h2>
+      <p class="hint">Claude keeps what it learns about this project in md files inside the repo, so it doesn't start from zero in every chat. They are committed with each change.</p>
+      <div class="seg" role="radiogroup" aria-label="Project memory">
+        <label><input type="radio" name="mode" value="auto"{% if p.memory_mode != "files" %} checked{% endif %}><div><strong>Claude manages it</strong><span>Uses the md files the repo already has (CLAUDE.md, MEMORY.md, PRD…). If there are none, it makes CLAUDE.md and MEMORY.md in the first chat and keeps them up to date.</span></div></label>
+        <label><input type="radio" name="mode" value="files"{% if p.memory_mode == "files" %} checked{% endif %}><div><strong>I pick the files</strong><span>Choose md files that are already in the repo. Claude reads them in the first chat, then keeps them updated.</span></div></label>
+      </div>
+      <div id="memory-picker" data-url="{{ url_for('projects.memory_files', project_id=p.id) }}" data-chosen="{{ p.memory_files|tojson|forceescape }}" hidden>
+        <p class="hint" id="memory-status">Loading the repo's files…</p>
+        <div id="memory-list" class="field"></div>
+      </div>
+      <div><button class="btn btn-primary" type="submit">Save</button></div>
     </form>
-    {% endif %}
     {% if beta and live %}
     <form class="panel-box" id="deploy-settings" method="post" action="{{ url_for('projects.save_deploy', project_id=p.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

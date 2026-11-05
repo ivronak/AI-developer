@@ -179,3 +179,23 @@ def resolve_repo(full_name):
     d = r.json()
     return d.get("id"), d.get("full_name") or full_name
 
+
+
+MEMORY_SKIP = ("node_modules/", "vendor/", "storage/", ".git/", "dist/", "build/", "venv/", ".venv/")
+
+
+def list_doc_files(full_name, branch):
+    """Paths of the md / txt files in a repo's branch (for picking the project's memory files), shortest path first. Raises GitHubError."""
+    token = decrypt_secret(get_setting("github_token_enc") or "")
+    try:
+        r = requests.get(f"{API}/repos/{full_name}/git/trees/{branch}?recursive=1", headers=_headers(token), timeout=TIMEOUT)
+    except requests.RequestException as e:
+        raise GitHubError(f"Could not reach GitHub ({e.__class__.__name__}).")
+    if r.status_code in (404, 409):
+        raise GitHubError("GitHub has no such repo or branch (or it is empty).")
+    if r.status_code != 200:
+        raise GitHubError(f"GitHub answered {r.status_code}.")
+    paths = [t["path"] for t in r.json().get("tree", [])
+             if t.get("type") == "blob" and t["path"].lower().endswith((".md", ".mdx", ".txt"))
+             and not any(t["path"].startswith(s) or "/" + s in t["path"] for s in MEMORY_SKIP)]
+    return sorted(paths, key=lambda p: (p.count("/"), p.lower()))[:300]
