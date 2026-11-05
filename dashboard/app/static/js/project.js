@@ -9,7 +9,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!panel || !tb || panel.hidden) return;
     var card = panel.querySelector("[data-change]:not([hidden]) > .ccard"), pk = panel.querySelector(".pick"), cp = document.getElementById("composer");
     /* never smaller than the card + a usable message box + the composer; on a short screen the page scrolls instead */
-    var need = (pk ? pk.offsetHeight : 0) + (card ? card.offsetHeight : 0) + 200 + (cp ? cp.offsetHeight : 0) + 40;
+    var need = (pk ? pk.offsetHeight : 0) + (card ? card.offsetHeight : 0) + 340 + (cp ? cp.offsetHeight : 0) + 40;
     panel.style.setProperty("--chat-h", Math.max(360, need, window.innerHeight - 72 - tb.offsetHeight - 14 - 14) + "px");
   }
   window.addEventListener("resize", fitChat);

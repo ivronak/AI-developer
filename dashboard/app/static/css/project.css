@@ -224,7 +224,7 @@
 /* chat screenshots: previews, and the drop overlay while image files are dragged over the page */
 .composer { position: relative; flex: none; }
 .composer { border-radius: 22px; padding: 10px 12px 8px; background: var(--surface-2, var(--surface)); }
-.composer textarea { resize: none; min-height: 44px; max-height: 40vh; padding: 8px 6px; line-height: 1.45; }
+.composer textarea { resize: none; min-height: 60px; max-height: 40vh; padding: 8px 6px; line-height: 1.45; }
 .composer .composer-bar { flex-wrap: nowrap; align-items: flex-end; }
 .composer .chip-row { flex: 1; min-width: 0; align-items: center; }
 .composer .preset-pick { border-color: transparent; background: transparent; color: var(--muted); height: 28px; padding: 0 4px; }
@@ -298,5 +298,5 @@
 .chat-scroll { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .chat-scroll > [data-change] { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
 .chat-scroll > [data-change] > .ccard { flex: none; }
-.thread-box { flex: 1; min-height: 200px; overflow-y: auto; overscroll-behavior: contain; padding: 12px; border-radius: var(--r-lg);
+.thread-box { flex: 1; min-height: 340px; overflow-y: auto; overscroll-behavior: contain; padding: 12px; border-radius: var(--r-lg);
   border: 1px solid var(--line); background: var(--surface); outline: none; }
