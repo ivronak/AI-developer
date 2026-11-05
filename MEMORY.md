@@ -419,3 +419,5 @@ Big picture lives in `TRACKER.md` (status, decisions) and `CHANGES.md` (the "zer
 
 
 - 2026-11-05 · Project details: Hosting select + Server text merged into one Server dropdown (servers from Settings + cPanel) · projects.py save_details, detail.html · 427 flow checks · next: deploy.
+
+- 2026-11-05 · Project Settings tab: AI engine section removed (UI only, route kept) · detail.html · 427 checks.

@@ -547,19 +547,6 @@
         {% if p.cc_notes %}<button class="btn btn-danger btn-sm" type="submit" name="action" value="clear" title="Empties the notes and starts a fresh Claude session, because the old session remembers earlier notes">Clear notes</button>{% endif %}</div>
     </form>
     {% endif %}
-    <form class="panel-box" id="ai-engine" method="post" action="{{ url_for('projects.save_engine', project_id=p.id) }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <h2><span class="h-ic" style="--h:285">{{ icon('activity') }}</span>AI engine</h2>
-      <div class="seg" role="radiogroup" aria-label="AI engine">
-        {% for val, t, sub in [("api", "Claude API", "Each change is a fresh Claude run with the dashboard's own tools. Cost per call shows on the AI cost page."),
-            ("claude_code", "Claude Code on the server", "One ongoing Claude Code session for this project — it remembers earlier work. Uses the login in Settings → Claude Code.")] %}
-          <label><input type="radio" name="engine" value="{{ val }}"{% if p.ai_engine == val %} checked{% endif %}><div><strong>{{ t }}</strong><span>{{ sub }}</span></div></label>
-        {% endfor %}
-      </div>
-      {% if p.ai_engine == "claude_code" %}<p class="hint">Session: <span class="mono">{{ (p.cc_session_id or "starts with the next message")[:8] }}</span>
-        {% if p.cc_session_id %}<label class="check"><input type="checkbox" name="new_session" value="1"> <span>Start a fresh session (Claude forgets this project's earlier chat)</span></label>{% endif %}</p>{% endif %}
-      <div><button class="btn btn-primary" type="submit">Save engine</button></div>
-    </form>
     {% if beta and live %}
     <form class="panel-box" id="deploy-settings" method="post" action="{{ url_for('projects.save_deploy', project_id=p.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
