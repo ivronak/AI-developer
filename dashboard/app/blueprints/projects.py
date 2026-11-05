@@ -83,7 +83,7 @@ def detail(project_id):
                            live_now=live_now, backups=backups, devs=devs, STEPS=STEPS, STEP_INDEX=STEP_INDEX,
                            status_info=status_info, servers=Server.query.order_by(Server.name).all(),
                            recent_jobs=recent_jobs, running_job=running_job, busy=jobs.busy_reason(p.id),
-                           env_off_example=deploy.default_env_off(p),
+                           env_off_example=deploy.default_env_off(p), setup=setup_steps(p, running_job),
                            rb_cur=rb_cur, rb_target=rb_target, last_snap=last_snap, on_beta=on_beta,
                            beta_login=__import__("app.betas", fromlist=["beta_auth"]).beta_auth(p.env("beta")),
                            repo_problem=__import__("app.gitcheck", fromlist=["problem"]).problem(p, p.env("live")),
@@ -225,12 +225,36 @@ def _title_from(text):
     return (t[:1].upper() + t[1:]) or "Change"
 
 
+def setup_steps(p, running_job=None):
+    """The three things a new project needs before changes can start: details, live folder, beta. Chat stays locked until all
+    are done — except on projects that already have changes (they were set up before this check existed)."""
+    live, beta = p.env("live"), p.env("beta")
+    making = bool(running_job and running_job.kind == "beta_setup")
+    steps = [
+        {"title": "Fill in the project details", "done": bool(not p.needs_setup and p.client_name and live and live.url),
+         "hint": "Settings tab → Project details: client, server and live address, then Save.", "go": "settings"},
+        {"title": "Set the live folder and database", "done": bool(live and live.server_id and live.deploy_path),
+         "hint": "Settings tab → Servers & deploy: press Auto-detect from the server, check, then Save.", "go": "settings"},
+        {"title": "Make the beta (test) site", "done": bool(beta and beta.server_id and beta.deploy_path),
+         "hint": "Claude is making it now — a few minutes." if making else "Starts by itself once step 2 is saved. Owner can also start it.",
+         "go": "", "making": making},
+    ]
+    first = next((x for x in steps if not x["done"]), None)
+    if first:
+        first["now"] = True
+    locked = first is not None and not p.changes
+    return {"steps": steps, "locked": locked, "first": first, "done": sum(x["done"] for x in steps)}
+
+
 @bp.post("/projects/<int:project_id>/chat")
 @login_required
 def chat(project_id):
     """New change or a follow-up on an open one: save the message (+ screenshots), then start Claude on it."""
     from app import agent
     p = project_or_404(project_id)
+    if setup_steps(p)["locked"]:
+        flash("Finish the setup steps at the top of the project first.", "bad")
+        return redirect(url_for("projects.detail", project_id=p.id))
     text = (request.form.get("message") or "").strip()
     files = [f for f in request.files.getlist("shots") if f and f.filename][:MAX_IMAGES + 1]
     if not text:

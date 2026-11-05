@@ -426,9 +426,35 @@ with app.app_context():
         resp("end_turn", NS(type="text", text="मैंने README में version बदला। Beta पर पहला पेज देखें।")),
     ]
     png = b"\x89PNG\r\n\x1a\n" + b"0" * 100
+    # setup steps: chat is locked until details, live folder and beta are done (only for projects without changes yet)
+    from app.blueprints.projects import setup_steps
+    _lv, _bt = newp.env("live"), newp.env("beta")
+    from app.models import Server
+    s1 = Server(name="setup-tmp", host="203.0.113.99", port=22, ssh_user="deploy")
+    db.session.add(s1)
+    db.session.commit()
+    _keep_env = (_lv.server_id, _lv.deploy_path, _bt.server_id, _bt.deploy_path)
+    _lv.server_id = _lv.deploy_path = _bt.server_id = _bt.deploy_path = None
+    db.session.commit()
+    st = setup_steps(newp)
+    ok(st["locked"] and st["done"] == 1 and st["first"]["title"].startswith("Set the live folder"), "setup: details done, live folder is next, chat locked")
+    pg = c.get(f"/projects/{newp.id}").data
+    ok(b"Before changes" in pg and b"1 of 3 done" in pg and b'id="composer" hidden' in pg, "the page shows the 3 steps and hides the composer")
+    c.post(f"/projects/{newp.id}/chat", data={"message": "too early"})
+    ok(Change.query.filter_by(project_id=newp.id).count() == 0, "a change can't be started before setup is done")
+    _lv.server_id, _lv.deploy_path = s1.id, "/home/live/crm"
+    db.session.commit()
+    ok(setup_steps(newp)["first"]["title"].startswith("Make the beta") and setup_steps(newp)["locked"], "step 3 (beta) is next")
+    _bt.server_id, _bt.deploy_path = s1.id, "/home/beta/crm"
+    db.session.commit()
+    ok(not setup_steps(newp)["locked"] and setup_steps(newp)["first"] is None and b"Before changes" not in c.get(f"/projects/{newp.id}").data,
+       "all 3 steps done: banner gone, chat open")
     r = c.post(f"/projects/{newp.id}/chat", data={"message": "Show v2 on the home page", "preset": "best", "shots": (io.BytesIO(png), "screen.png")},
                content_type="multipart/form-data")
     ok(r.status_code == 302, "owner starts a change from the chat")
+    _lv.server_id, _lv.deploy_path, _bt.server_id, _bt.deploy_path = _keep_env
+    db.session.delete(s1)
+    db.session.commit()
     ch7 = Change.query.filter_by(project_id=newp.id).order_by(Change.id.desc()).first()
     db.session.refresh(ch7)
     ok(ch7.agent_state == "done" and ch7.status == "passed", "Claude finished and the tests passed")

@@ -235,3 +235,18 @@
 .shot-x { position: absolute; top: -7px; right: -7px; width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 1px solid var(--line-strong);
   background: var(--surface); color: inherit; font-size: 15px; line-height: 1; cursor: pointer; }
 .shot-x:hover, .shot-x:focus-visible { background: var(--surface-2); }
+
+/* "Before changes" setup steps */
+.setup-card { border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); padding: 16px 18px; margin: 0 0 16px; }
+.setup-card h2 { margin: 0 0 10px; font-size: 16px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.setup-card h2 small { font-size: 12px; font-weight: 400; color: var(--muted); }
+.setup-card ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.setup-card li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-md); }
+.setup-card li.now { border-color: var(--warn); background: var(--warn-soft); }
+.setup-card li.done { opacity: .7; }
+.setup-card .num { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 600; background: var(--line); color: var(--fg); }
+.setup-card li.done .num { background: var(--ok); color: #fff; }
+.setup-card .num svg { width: 14px; height: 14px; }
+.setup-card .txt { flex: 1; min-width: 0; }
+.setup-card .txt small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
+@media (max-width: 560px) { .setup-card li { flex-wrap: wrap; } }

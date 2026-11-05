@@ -28,8 +28,21 @@
       <button class="btn btn-sm btn-primary" type="button" {% if not owner %}disabled title="Owner only"{% elif lwhy %}data-soon="{{ lwhy }}"{% else %}data-open="dlg-golive"{% endif %}>{{ icon('rocket') }}<span class="lbl">Go Live</span></button>
     </div>
   </section>
-  {% if p.needs_setup %}
-    <div class="pc-now s-warn">{{ icon('plus') }}<span>New from GitHub — fill in the client, hosting and addresses<small>{% if owner %}Open the Settings tab below.{% else %}The owner fills these in.{% endif %}</small></span></div>
+  {% if setup.first %}
+    <section class="setup-card" id="setup-steps">
+      <h2>Before changes<small>{{ setup.done }} of 3 done{% if setup.locked %} — chat opens when all 3 are done{% endif %}</small></h2>
+      <ol>
+        {% for st in setup.steps %}
+          <li class="{{ 'done' if st.done else ('now' if st.now else '') }}">
+            <span class="num">{% if st.done %}{{ icon('check') }}{% else %}{{ loop.index }}{% endif %}</span>
+            <span class="txt"><strong>{{ st.title }}</strong>{% if not st.done %}<small>{{ st.hint }}</small>{% endif %}</span>
+            {% if st.now and st.go and owner %}<button class="btn btn-sm btn-primary" type="button" data-tab="{{ st.go }}">Open Settings</button>
+            {% elif st.now and loop.last and owner and not st.making and setup.steps[1].done %}<form method="post" action="{{ url_for('projects.start_job', project_id=p.id, kind='beta_setup') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-primary">Make beta now</button></form>
+            {% elif st.now and not owner %}<span class="hint">The owner does this.</span>{% endif %}
+          </li>
+        {% endfor %}
+      </ol>
+    </section>
   {% endif %}
   {% if p.repo_missing %}
     <div class="pc-now s-bad">{{ icon('github') }}<span>The repo {{ p.github_repo }} is no longer on GitHub<small>Renamed or deleted? Fix the repo name in the Settings tab.</small></span></div>
@@ -329,7 +342,7 @@
       </div>
     {% endfor %}
 
-    <form class="composer" id="composer" method="post" action="{{ url_for('projects.chat', project_id=p.id) }}" enctype="multipart/form-data" data-max-images="{{ max_images }}" data-max-mb="{{ max_image_mb }}">
+    <form class="composer" id="composer"{% if setup.locked %} hidden style="display:none"{% endif %} method="post" action="{{ url_for('projects.chat', project_id=p.id) }}" enctype="multipart/form-data" data-max-images="{{ max_images }}" data-max-mb="{{ max_image_mb }}">
       <div class="drop-hint" id="drop-hint" hidden aria-hidden="true">Drop images here to attach them</div>
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="change_id" id="composer-change" value="{{ current.id if current else '' }}">
