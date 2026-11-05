@@ -124,7 +124,7 @@ document.addEventListener("DOMContentLoaded", function () {
         li.appendChild(img); li.appendChild(cap); li.appendChild(x); previews.appendChild(li);
       }
       previews.hidden = !pending.length;
-      shotHint.textContent = pending.length ? pending.length + " of " + maxImages + " screenshots · paste or drop more" : "or paste / drop images";
+      shotHint.textContent = pending.length ? pending.length + " of " + maxImages + " screenshots · paste or drop more" : "";
     };
 
     var addShots = function (list) {
@@ -265,6 +265,46 @@ document.addEventListener("DOMContentLoaded", function () {
     };
     ccModel.addEventListener("change", fillEffort);
     fillEffort();
+    /* one compact model + effort picker (like Claude Code's); the two native selects stay as the source of truth */
+    var mp = document.getElementById("mpick"), mpBtn = document.getElementById("mpick-btn"), mpMenu = document.getElementById("mpick-menu"), mpLabel = document.getElementById("mpick-label");
+    if (mp && mpBtn && mpMenu) {
+      var cap = function (t) { return t ? t.charAt(0).toUpperCase() + t.slice(1) : t; };
+      var buildPick = function () {
+        var cur = ccModel.options[ccModel.selectedIndex];
+        mpLabel.textContent = (cur ? cur.textContent : "Model") + (ccEffort.value ? " · " + cap(ccEffort.value) : "");
+        mpMenu.innerHTML = "";
+        Array.prototype.forEach.call(ccModel.options, function (o) {
+          var b = document.createElement("button");
+          b.type = "button"; b.className = "mpick-item"; b.setAttribute("role", "menuitemradio"); b.setAttribute("aria-checked", String(o.value === ccModel.value));
+          var n = document.createElement("span"); n.textContent = o.textContent; b.appendChild(n);
+          if (o.getAttribute("data-credits")) { var c = document.createElement("em"); c.textContent = "needs credits"; b.appendChild(c); }
+          if (o.value === ccModel.value) { var k = document.createElement("i"); k.textContent = "✓"; b.appendChild(k); }
+          b.addEventListener("click", function () { ccModel.value = o.value; ccModel.dispatchEvent(new Event("change")); mpBtn.focus(); });
+          mpMenu.appendChild(b);
+        });
+        if (!ccEffort.disabled && ccEffort.options.length > 1) {
+          var row = document.createElement("div"); row.className = "mpick-eff";
+          var lab = document.createElement("span"); lab.textContent = "Effort"; row.appendChild(lab);
+          Array.prototype.forEach.call(ccEffort.options, function (o) {
+            var b = document.createElement("button");
+            b.type = "button"; b.className = "mpick-pill"; b.setAttribute("aria-pressed", String(o.value === ccEffort.value));
+            b.textContent = o.value ? cap(o.value) : "Default";
+            b.addEventListener("click", function () { ccEffort.value = o.value; ccEffort.dispatchEvent(new Event("change")); });
+            row.appendChild(b);
+          });
+          mpMenu.appendChild(row);
+        }
+      };
+      var openPick = function (on) { mpMenu.hidden = !on; mpBtn.setAttribute("aria-expanded", String(on)); };
+      mpBtn.addEventListener("click", function () { openPick(mpMenu.hidden); });
+      document.addEventListener("click", function (e) { if (!mp.contains(e.target)) openPick(false); });
+      document.addEventListener("keydown", function (e) { if (e.key === "Escape") openPick(false); });
+      ccModel.addEventListener("change", buildPick); ccEffort.addEventListener("change", buildPick);
+      var mo = new MutationObserver(buildPick);
+      mo.observe(ccModel, { childList: true }); mo.observe(ccEffort, { childList: true });
+      ccModel.hidden = true; ccEffort.hidden = true; mp.hidden = false;
+      buildPick();
+    }
     /* the Claude account picked: its own model list (kept on the same model when that account has it too) */
     var ccAccount = document.getElementById("cc-account");
     var usageEl = document.getElementById("cc-usage");

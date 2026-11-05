@@ -378,12 +378,13 @@
             {% for row in cc_accts %}<option value="{{ row.a.id }}"{% if row.default %} selected{% endif %}{% if row.a.status == "logged_out" %} disabled{% endif %}>{{ row.a.name }}{% if row.a.status == "logged_out" %} · logged out{% endif %}</option>{% endfor %}
           </select>
           <span id="cc-usage" class="cc-usage" data-url="{{ url_for('projects.claude_usage') }}" title="This Claude account's plan usage (same numbers as /usage in Claude Code)" hidden></span>
-          {% for row in cc_accts %}<template id="cc-models-{{ row.a.id }}">{% for m in row.models %}<option value="{{ m.value }}" data-efforts="{{ m.supportedEffortLevels|join(',') }}">{{ m.displayName }}{% if m.description %} — {{ m.description }}{% endif %}{% if m.value in cc_credit_models %} · needs extra usage credits{% endif %}</option>{% endfor %}</template>{% endfor %}
+          {% for row in cc_accts %}<template id="cc-models-{{ row.a.id }}">{% for m in row.models %}<option value="{{ m.value }}" data-efforts="{{ m.supportedEffortLevels|join(',') }}"{% if m.value in cc_credit_models %} data-credits="1"{% endif %}>{{ m.displayName }}</option>{% endfor %}</template>{% endfor %}
           {% endif %}
           <label class="label" for="cc-model" hidden>Model</label>
           <select id="cc-model" name="model" class="preset-pick" title="Which Claude model works on this" data-default="{{ cc_default[0] }}">
-            {% for m in cc_list %}<option value="{{ m.value }}" data-efforts="{{ m.supportedEffortLevels|join(',') }}"{% if m.value == cc_pick.value %} selected{% endif %}>{{ m.displayName }}{% if m.description %} — {{ m.description }}{% endif %}{% if m.value in cc_credit_models %} · needs extra usage credits{% endif %}</option>{% endfor %}
+            {% for m in cc_list %}<option value="{{ m.value }}" data-efforts="{{ m.supportedEffortLevels|join(',') }}"{% if m.value in cc_credit_models %} data-credits="1"{% endif %}{% if m.value == cc_pick.value %} selected{% endif %}>{{ m.displayName }}</option>{% endfor %}
           </select>
+          <div class="mpick" id="mpick" hidden><button type="button" class="mpick-btn" id="mpick-btn" aria-haspopup="true" aria-expanded="false" title="Model and effort"><span id="mpick-label"></span><svg viewBox="0 0 10 6" width="9" height="6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button><div class="mpick-menu" id="mpick-menu" role="menu" hidden></div></div>
           <label class="label" for="cc-effort" hidden>Effort</label>
           <select id="cc-effort" name="effort" class="preset-pick" title="How hard Claude thinks: higher is slower and uses more of your plan"{% if not cc_pick.supportedEffortLevels %} disabled{% endif %}>
             <option value="">{{ "Effort: default" if cc_pick.supportedEffortLevels else "Effort: not available" }}</option>
@@ -398,7 +399,7 @@
           </select>
           </span>
           <span data-engine-only="claude_code" style="display:contents">
-          <label class="check debug-pick" title="For a bug: Sonnet 5.5, high effort, up to 120 steps (or the cost limit in Settings). Claude reproduces the problem first, finds the cause from evidence, then fixes and checks it."><input type="checkbox" name="debug" value="1" id="cc-debug"> <span>Debug mode</span></label>
+          <label class="check debug-pick" title="For a bug: Sonnet 5.5, high effort, up to 120 steps (or the cost limit in Settings). Claude reproduces the problem first, finds the cause from evidence, then fixes and checks it."><input type="checkbox" name="debug" value="1" id="cc-debug"> <span>Debug</span></label>
           </span>
         </div>
         <button class="btn btn-primary btn-sm" type="submit" id="composer-send">{{ icon('send') }}<span id="send-label">{{ "Send" if current else "Start change" }}</span></button>
