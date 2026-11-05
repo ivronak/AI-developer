@@ -588,6 +588,34 @@ with app.app_context():
     ok(b"Servers &amp; deploy saved" in r.data and newp.env("beta").server_id == s1.id and newp.env("live").db_name == "crm_live",
        "owner saves servers & deploy")
     ok(newp.deploy_script == "", "an unchanged template is not stored (it follows the tech stack)")
+
+    # live auto-detect (read-only; only fills the form)
+    _det_keep, _det_scripts = remote_mod.run, []
+    def _det_run(server, script, timeout=900):
+        _det_scripts.append(script)
+        return _det_reply[0]
+    _det_reply = [(0, "PATH=/home/u1/domains/crm.example.com/public_html\nGIT=1\nENGINE=mysql\nDB=u1_crm\n")]
+    remote_mod.run = _det_run
+    r = c.post(f"/projects/{newp.id}/detect-live", data={"server": str(s1.id)})
+    jd = r.get_json()
+    ok(jd["path"] == "/home/u1/domains/crm.example.com/public_html" and jd["db"] == "u1_crm" and jd["engine"] == "mysql" and jd["git"] and not jd["guess"],
+       "auto-detect returns the live folder, database and type")
+    ok("crm.example.com" in _det_scripts[0] and "DB_PASSWORD" not in _det_scripts[0] and "PASS" not in _det_scripts[0].upper().replace("PASSWD", ""),
+       "the detect script asks for the domain and never reads a password")
+    _det_reply[0] = (0, "PATH=/home/x/public_html\nGUESS=1\nENGINE=pgsql\nDB=pg_app\n")
+    jd = c.post(f"/projects/{newp.id}/detect-live", data={"server": str(s1.id)}).get_json()
+    ok(jd["guess"] and jd["engine"] == "postgres" and jd["db"] == "pg_app", "main-folder guess is flagged; pgsql maps to postgres")
+    _det_reply[0] = (0, "PATH=/home/x/public_html\nENGINE=mysql\nDB=bad name; rm -rf\n")
+    jd = c.post(f"/projects/{newp.id}/detect-live", data={"server": str(s1.id)}).get_json()
+    ok(jd["path"] == "/home/x/public_html" and jd["db"] == "", "an odd database name is dropped, not trusted")
+    _det_reply[0] = (0, "PATH=/home/../etc\n")
+    ok("error" in c.post(f"/projects/{newp.id}/detect-live", data={"server": str(s1.id)}).get_json(), "a path with .. is refused")
+    _det_reply[0] = (3, "")
+    ok("No folder" in c.post(f"/projects/{newp.id}/detect-live", data={"server": str(s1.id)}).get_json()["error"], "nothing found is explained")
+    ok("Pick the live server" in c.post(f"/projects/{newp.id}/detect-live", data={}).get_json()["error"], "no server picked is explained")
+    ok(dv.post(f"/projects/{newp.id}/detect-live", data={"server": str(s1.id)}).status_code == 403, "developer can't run auto-detect")
+    ok(newp.env("live").deploy_path == "/home/live/crm", "auto-detect saves nothing")
+    remote_mod.run = _det_keep
     r = c.post(f"/settings/servers/{s1.id}/delete", follow_redirects=True)
     ok(b"still used by 2" in r.data and db.session.get(Server, s1.id) is not None, "a server in use can't be removed")
 

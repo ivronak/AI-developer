@@ -270,3 +270,66 @@ def run_sync(job):
     log("Sync", project_id=project.id, user=job.by_user, details="Live → Beta database copy")
     db.session.commit()
     note(job, "Beta now has a fresh copy of the live data")
+
+
+def detect_script(domain):
+    """A read-only bash script: finds the folder that serves `domain` on a server (Hostinger, CyberPanel, cPanel layouts) and prints
+    PATH= / GIT= / DB= / ENGINE= lines. Of the project's .env / wp-config.php it reads ONLY the database name and type — never a password."""
+    d = shlex.quote(domain)
+    return f"""domain={d}
+bare="${{domain#www.}}"
+found=""
+for c in "$HOME/domains/$bare/public_html" "/home/$bare/public_html" "/home/$domain/public_html" "$HOME/$bare/public_html" "$HOME/public_html/$bare"; do
+  if [ -d "$c" ]; then found="$c"; break; fi
+done
+guess=""
+if [ -z "$found" ] && [ -d "$HOME/public_html" ]; then found="$HOME/public_html"; guess=1; fi
+[ -n "$found" ] || exit 3
+case "$found" in */public) if [ -f "${{found%/public}}/artisan" ]; then found="${{found%/public}}"; fi;; esac
+echo "PATH=$found"
+[ -n "$guess" ] && echo "GUESS=1"
+[ -e "$found/.git" ] && echo "GIT=1"
+if [ -f "$found/.env" ]; then
+  conn=$(grep -E '^DB_CONNECTION=' "$found/.env" | head -1 | cut -d= -f2- | tr -d "\\"' \\r")
+  name=$(grep -E '^DB_DATABASE=' "$found/.env" | head -1 | cut -d= -f2- | tr -d "\\"' \\r")
+  echo "ENGINE=$conn"
+  echo "DB=$name"
+elif [ -f "$found/wp-config.php" ]; then
+  name=$(sed -n "s/.*define( *['\\"]DB_NAME['\\"] *, *['\\"]\\([^'\\"]*\\)['\\"].*/\\1/p" "$found/wp-config.php" | head -1)
+  echo "ENGINE=mysql"
+  echo "DB=$name"
+fi
+"""
+
+
+def parse_detect(out):
+    """The detect script's lines → {path, db, engine, git, guess}; every value is checked, anything odd is left out."""
+    from app.blueprints.projects import DB_RE, PATH_RE
+    kv = {}
+    for line in (out or "").splitlines():
+        if "=" in line and line.split("=", 1)[0] in ("PATH", "GUESS", "GIT", "DB", "ENGINE"):
+            k, v = line.split("=", 1)
+            kv[k] = v.strip()
+    path = kv.get("PATH", "")
+    if not PATH_RE.match(path) or ".." in path:
+        return None
+    engine = {"mysql": "mysql", "mariadb": "mysql", "pgsql": "postgres", "postgres": "postgres", "sqlite": "sqlite"}.get(kv.get("ENGINE", "").lower(), "")
+    db_name = kv.get("DB", "")
+    if engine == "sqlite":
+        db_name = "sqlite:" + (db_name.split(path + "/", 1)[-1] if db_name.startswith(path + "/") else "database/database.sqlite")
+        if db_name == "sqlite:" or db_name.startswith("sqlite:/"):
+            db_name = "sqlite:database/database.sqlite"
+    if not DB_RE.match(db_name) or ".." in db_name:
+        db_name = ""
+    return {"path": path, "db": db_name, "engine": engine, "git": kv.get("GIT") == "1", "guess": kv.get("GUESS") == "1"}
+
+
+def detect_live(server, domain):
+    """Look at a server and say which folder serves `domain` and which database its app uses. (None, reason) when nothing is found."""
+    code, out = remote.run(server, detect_script(domain), timeout=60)
+    if code == 3:
+        return None, f"No folder for {domain} found on this server (looked for the Hostinger, CyberPanel and cPanel layouts)."
+    found = parse_detect(out)
+    if code != 0 or found is None:
+        return None, "The server answered, but nothing usable was found."
+    return found, ""

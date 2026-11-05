@@ -269,6 +269,25 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
+  /* Servers & deploy: fill the live folder / database from the server itself (nothing is saved until the form is) */
+  var detectBtn = document.getElementById("detect-live");
+  if (detectBtn) {
+    detectBtn.addEventListener("click", function () {
+      var form = document.getElementById("deploy-settings"), status = document.getElementById("detect-status");
+      var fd = new FormData(); fd.append("csrf_token", form.querySelector('[name="csrf_token"]').value); fd.append("server", document.getElementById("live-srv").value);
+      detectBtn.disabled = true; status.textContent = "Looking on the server…";
+      fetch(detectBtn.getAttribute("data-url"), { method: "POST", body: fd, credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (d) {
+        detectBtn.disabled = false;
+        if (d.error) { status.textContent = d.error; return; }
+        document.getElementById("live-path").value = d.path;
+        if (d.db) document.getElementById("live-db").value = d.db;
+        var eng = document.getElementById("db-engine"); if (eng && d.engine) eng.value = d.engine;
+        status.textContent = "Found " + d.path + (d.db ? " · database " + d.db : " · no database found in .env") + (d.git ? " · it is a git checkout" : " · not a git checkout yet")
+          + (d.guess ? " — a guess (the main folder), please check it" : "") + ". Press Save servers & deploy to keep it.";
+      }).catch(function () { detectBtn.disabled = false; status.textContent = "Could not reach the dashboard."; });
+    });
+  }
+
   /* project memory: "I pick the files" lists the repo's md files (loaded once, the saved picks stay ticked) */
   var memBox = document.getElementById("memory-picker");
   if (memBox) {

@@ -569,6 +569,7 @@
           <div class="field"><label for="{{ e.kind }}-path">Project folder on the server</label><input id="{{ e.kind }}-path" name="{{ e.kind }}_path" class="mono" value="{{ e.deploy_path or '' }}" placeholder="/home/{{ 'beta' if e.kind == 'beta' else 'site' }}/public_html"></div>
         </div>
         <div class="field"><label for="{{ e.kind }}-db">Database name</label><input id="{{ e.kind }}-db" name="{{ e.kind }}_db" class="mono" value="{{ e.db_name or '' }}" placeholder="{{ 'site_beta' if e.kind == 'beta' else 'site_live' }}"></div>
+        {% if e.kind == "live" %}<div class="chip-row"><button type="button" class="btn btn-sm" id="detect-live" data-url="{{ url_for('projects.detect_live', project_id=p.id) }}">{{ icon('sync') }}Auto-detect from the server</button><span class="hint" id="detect-status">Finds the folder and database for {{ live.url }} (works for a VPS or Hostinger over SSH). Nothing is saved until you press Save.</span></div>{% endif %}
       {% endfor %}
       <div class="field"><label for="db-engine">Database type</label><select id="db-engine" name="db_engine">
         <option value="mysql"{% if p.db_engine not in ("postgres", "sqlite") %} selected{% endif %}>MySQL / MariaDB</option>

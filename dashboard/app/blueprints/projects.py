@@ -457,6 +457,34 @@ PATH_RE = re.compile(r"^/[A-Za-z0-9._/\-]{1,250}$")
 DB_RE = re.compile(r"^([A-Za-z0-9_\-]{1,64}|sqlite:[A-Za-z0-9_\-][A-Za-z0-9._/\-]{0,200})$")   # name, or sqlite:<file in the folder>
 
 
+@bp.post("/projects/<int:project_id>/detect-live")
+@login_required
+@owner_required
+def detect_live(project_id):
+    """Auto-detect the live folder and database from the server picked in the form (read-only; nothing is saved until the owner saves)."""
+    from urllib.parse import urlparse
+
+    from app import deploy, remote
+    from app.models import Server
+    p = project_or_404(project_id)
+    s = db.session.get(Server, request.form.get("server", type=int) or 0)
+    live = p.env("live")
+    host = (urlparse(live.url or "").hostname or "") if live else ""
+    if s is None:
+        return jsonify(error="Pick the live server first.")
+    if not re.match(r"^[A-Za-z0-9.\-]{3,190}$", host):
+        return jsonify(error="Save the project's live address first.")
+    try:
+        found, why = deploy.detect_live(s, host)
+    except remote.RemoteError as e:
+        return jsonify(error=str(e))
+    if found is None:
+        return jsonify(error=why)
+    log("Project settings", project_id=p.id, details=f"Live folder detected on {s.name}: {found['path']}")
+    db.session.commit()
+    return jsonify(**found)
+
+
 @bp.post("/projects/<int:project_id>/deploy-settings")
 @login_required
 @owner_required
