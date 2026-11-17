@@ -1,7 +1,7 @@
 /* Project page behaviour (data is rendered by the server): tabs (kept in the #hash), change picker, settings form,
    "coming in step N" notes. */
 document.addEventListener("DOMContentLoaded", function () {
-  var TABS = ["chat", "changes", "apps", "deploys", "backups", "settings"];
+  var TABS = ["chat", "changes", "apps", "deploys", "settings"];
 
   /* the chat pane fills exactly what is left of the screen under the tab bar (header 72px kept clear) */
   function fitChat() {

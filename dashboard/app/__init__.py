@@ -13,7 +13,8 @@ from .ui_helpers import hue, initials, tech_hue
 # the routes themselves are protected with @owner_required (hiding a link is never the protection).
 NAV = [
     {"key": "projects", "endpoint": "main.projects", "icon": "grid", "label": "Projects", "short": "Projects"},
-    {"key": "backups", "endpoint": "main.backups", "icon": "db", "label": "Backups", "short": "Backups"},
+    # HIDDEN until backups are worked on:
+    # {"key": "backups", "endpoint": "main.backups", "icon": "db", "label": "Backups", "short": "Backups"},
     {"key": "users", "endpoint": "users.index", "icon": "users", "label": "Users & log", "short": "Users", "owner_only": True},
     {"key": "ai", "endpoint": "ai_cost.index", "icon": "coin", "label": "AI cost", "short": "AI cost", "owner_only": True},
     {"key": "settings", "endpoint": "settings.index", "icon": "gear", "label": "Settings", "short": "Settings", "owner_only": True},

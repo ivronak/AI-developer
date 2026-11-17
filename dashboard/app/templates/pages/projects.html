@@ -146,7 +146,7 @@
               {% endif %}
               <div class="stats">
                 <div class="stat" style="--h:220"><i>{{ icon('upload') }}</i><b>{{ ago_of(r.last_deploy.created_at if r.last_deploy else None) }}</b><span>Last deploy</span></div>
-                <div class="stat{% if r.backup_stale %} alarm{% endif %}" style="--h:{{ 0 if r.backup_stale else 160 }}"><i>{{ icon('db') }}</i><b>{{ r.last_backup.created_at|ago if r.last_backup else "Missing" }}</b><span>Last backup</span></div>
+                {# HIDDEN until backups are worked on <div class="stat{% if r.backup_stale %} alarm{% endif %}" style="--h:{{ 0 if r.backup_stale else 160 }}"><i>{{ icon('db') }}</i><b>{{ r.last_backup.created_at|ago if r.last_backup else "Missing" }}</b><span>Last backup</span></div> #}
                 <div class="stat{% if not r.open %} zero{% endif %}" style="--h:265"><i>{{ icon('list') }}</i><b>{{ r.open }}</b><span>Open changes</span></div>
                 <div class="stat{% if not r.waiting %} zero{% endif %}" style="--h:215"><i>{{ icon('send') }}</i><b>{{ r.waiting }}</b><span>Waiting approval</span></div>
               </div>
@@ -157,14 +157,14 @@
       </div>
 
       <div class="plist" id="list" hidden>
-        <div class="plist-head"><span>Project</span><span>Status</span><span>Live version</span><span>Backup</span><span>Last deploy</span></div>
+        <div class="plist-head"><span>Project</span><span>Status</span><span>Live version</span><span>Last deploy</span></div>
         {% for r in rows %}{% set p = r.p %}
           <a class="prow" href="{{ url_for('projects.detail', project_id=p.id) }}" style="--h:{{ hue(p) }}"
              data-item data-name="{{ (p.name ~ ' ' ~ p.client_name)|lower }}" data-level="{{ r.level }}" data-waiting="{{ r.waiting }}" data-open="{{ r.open }}" data-active="{{ 1 if p.is_active else 0 }}">
             <span class="who"><span class="pav{% if not p.is_active %} off{% endif %}">{{ initials(p.name) }}</span><span class="nm"><strong>{{ p.name }}</strong><span>{{ p.client_name }} · {{ p.tech_stack|join(" + ") }}</span></span></span>
             <span class="col"><span class="st s-{{ r.level }}"><span class="ldot s-{{ r.level }}"></span>{{ r.label }}</span>{% if r.reason %}<span class="sub">{{ r.reason }}</span>{% endif %}</span>
             <span class="col col-hide"><span class="commit">{{ icon('branch') }}<span class="mono">{{ r.live.current_commit if r.live else "—" }}</span></span><span class="sub">{{ r.last_deploy.note if r.last_deploy else "" }}</span></span>
-            <span class="col col-hide"><span class="sub{% if r.backup_stale %} stale{% endif %}">{{ r.last_backup.created_at|ago if r.last_backup else "missing" }}</span></span>
+            {# HIDDEN until backups are worked on <span class="col col-hide"><span class="sub{% if r.backup_stale %} stale{% endif %}">{{ r.last_backup.created_at|ago if r.last_backup else "missing" }}</span></span> #}
             <span class="col col-hide"><span>{{ ago_of(r.last_deploy.created_at if r.last_deploy else None) }}</span><span class="sub">{{ r.open }} open · {{ r.waiting }} waiting</span></span>
           </a>
         {% endfor %}

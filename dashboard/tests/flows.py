@@ -195,7 +195,7 @@ with app.app_context():
     r = c.get("/projects")
     ok(r.status_code == 200 and r.data.count(b'class="pcard"') == 12, "owner sees all 12 project cards")
     ok(b"Parking Manager" in r.data and b"Live site down for 12 min" in r.data, "red project shows its incident")
-    ok(b"Last backup is" in r.data, "stale backup shows as attention")
+    ok(b"Last backup is" not in r.data and b"No backup yet" not in r.data, "backup warnings are hidden for now")
     ok(b"Pending 4" in r.data, "4 approvals pending")
     for pid in range(1, 13):
         ok(c.get(f"/projects/{pid}").status_code == 200, f"project page {pid} opens")

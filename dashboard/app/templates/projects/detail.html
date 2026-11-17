@@ -203,7 +203,7 @@
   </dialog>
 
   <nav class="tabs" role="tablist" aria-label="Project sections" id="tabs">
-    {% for key, label in [("chat", "Chat"), ("changes", "Changes"), ("apps", "Apps"), ("deploys", "Deploys"), ("backups", "Backups"), ("settings", "Settings")] %}
+    {% for key, label in [("chat", "Chat"), ("changes", "Changes"), ("apps", "Apps"), ("deploys", "Deploys"), ("settings", "Settings")] %}
       {% if key != "apps" or p.github_repo %}<button type="button" role="tab" data-tab="{{ key }}" aria-selected="{{ 'true' if key == 'chat' else 'false' }}">{{ label }}{% if key == "apps" and app_todo %} <span class="tab-dot" aria-label="needs a build"></span>{% endif %}</button>{% endif %}
     {% endfor %}
   </nav>
