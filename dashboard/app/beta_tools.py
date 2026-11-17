@@ -66,18 +66,24 @@ def _q(v):
 
 
 # ---------- scope ----------
-def _ctx(job):
+def _ctx(job, fresh=False):
+    """fresh=True (status / make_website of a beta_setup job only): the address a rebuilt beta is made at — under the live
+    server's current beta domain. Every other tool follows the beta's recorded address (make_website rewrites it)."""
     p = job.project
     live, beta = p.env("live"), p.env("beta")
     if live is None or live.server is None or not live.deploy_path:
         raise ToolError("This project has no live server / folder set — the beta is made as a copy of live.")
-    n = betas.names(p)
+    n = betas.names(p, fresh=fresh and job.kind == "beta_setup")
     return p, live, beta, n
 
 
 def _beta_ready(beta):
     if beta is None or not beta.managed or not beta.site_user:
         raise ToolError("The beta website doesn't exist yet — call make_website first.")
+    host = (beta.url or "").split("//")[-1].split("/")[0].lower()
+    if host and not (beta.deploy_path or "").startswith(f"/home/{host}/"):
+        raise ToolError(f"The beta's folder ({beta.deploy_path}) does not belong to its address ({host}) — call make_website first, "
+                        "it makes the website for that address and puts the record right.")
     return beta
 
 
@@ -108,7 +114,9 @@ def _as_site(beta, command, timeout=900):
 
 # ---------- tools ----------
 def t_status(job, args):
-    p, live, beta, n = _ctx(job)
+    p, live, beta, n = _ctx(job, fresh=True)
+    if beta is not None and beta.managed and beta.url.split("//")[-1].split("/")[0].lower() != n["host"]:
+        beta = None                                    # the old beta sits at another address: this rebuild makes a new website
     code, out = _sh(live.server, f"""L={_q(live.deploy_path)}; H={_q(live.url.split('//')[-1].split('/')[0])}
 echo "PHP=$(grep -o 'lsphp[0-9]*' /usr/local/lsws/conf/vhosts/$H/vhost.conf 2>/dev/null | head -1)"
 echo "LIVE_DOCROOT=$(grep -m1 '^docRoot' /usr/local/lsws/conf/vhosts/$H/vhost.conf 2>/dev/null | awk '{{print $2}}')"
@@ -134,7 +142,7 @@ echo "--- live proxy rules:"; grep -hoE '127\\.0\\.0\\.1:[0-9]+' "$L/.htaccess" 
 
 def t_make_website(job, args):
     """The beta's website + SSL (CyberPanel) and its password lock. Safe to call again."""
-    p, live, beta, n = _ctx(job)
+    p, live, beta, n = _ctx(job, fresh=True)
     host, url, path = n["host"], f"https://{n['host']}", f"/home/{n['host']}/public_html"
     note(job, f"Claude: making the website {host}")
     php = betas._value(betas._run(live.server, f"grep -o 'lsphp[0-9]*' /usr/local/lsws/conf/vhosts/"
@@ -155,7 +163,13 @@ echo "USER=$(stat -c %U /home/$H)"
     if beta is None:
         beta = Environment(kind="beta", branch="beta", url=url)
         p.environments.append(beta)
+    moved = beta.url != url and beta.managed and bool(beta.site_user)
+    was = f"{beta.url} · folder {beta.deploy_path} · website user {beta.site_user}" if moved else ""
     beta.url, beta.server_id, beta.deploy_path, beta.site_user, beta.managed = url, live.server_id, path, user, True
+    if moved:                                   # the old website stays on the server: say where, and make Claude save fresh steps
+        p.beta_recipe = ""
+        note(job, f"Claude: making the website {host}", f"The beta moved to {url}. The old website is still on the server and nothing removes it: {was}")
+        log("Beta moved", project_id=p.id, details=f"{was} → {url}")
     db.session.commit()
     betas.lock(beta, job)
     return f"Website {host} is ready (SSL on, behind the beta password). Folder {path}, Linux user {user}, PHP {php_ver}."
@@ -234,7 +248,7 @@ if [ -d "$L/storage" ] && [ ! -d "$P/storage" ]; then
   mkdir -p "$P/storage/logs" "$P/storage/framework/cache" "$P/storage/framework/sessions" "$P/storage/framework/views"
 fi
 chown -R "$U:$U" "$P"; chmod -R u+rwX,go+rX,go-w "$P"; [ -f "$P/.env" ] && chmod 640 "$P/.env"
-if [ "$P" = "/home/{n['host']}/public_html" ]; then chown "$U:nobody" "$P"; chmod 750 "$P"; else chmod 750 "$P"; fi
+if [ "$P" = {_q('/home/' + n['host'] + '/public_html')} ]; then chown "$U:nobody" "$P"; chmod 750 "$P"; else chmod 750 "$P"; fi
 rm -rf {_q(stage)}
 """, timeout=1800)
     if code != 0:
@@ -620,6 +634,15 @@ def dbg_request(job, args):
     import requests
     p, live, beta, n = _ctx(job)
     beta = _beta_ready(beta)
+    return _request_beta(job, args, beta, requests)
+
+
+def _request_beta(job, args, beta, requests):
+    with deploy.lookup_for(beta.url):
+        return _do_request(job, args, beta, requests)
+
+
+def _do_request(job, args, beta, requests):
     path = str(args.get("path") or "/").strip()
     if not path.startswith("/") or "//" in path or "\\" in path:
         raise ToolError("path must be a path on the beta, starting with / (e.g. /forgot-password).")

@@ -1531,6 +1531,8 @@ with app.app_context():
 
     # ---------- automatic beta (owner, 2026-10-17) — fake server + fake Claude Code ----------
     from app import betas as betas_mod
+    real_dns_problem = betas_mod.dns_problem
+    betas_mod.dns_problem = lambda host, server: ""          # the real one asks DNS — tested on its own further down
     setup_scripts, recipe_exit = [], [0]
 
     def setup_run(server, script, timeout=900):
@@ -2137,6 +2139,296 @@ with app.app_context():
     remote_mod.run = keep_run2
     jb.state = "done"
     db.session.commit()
+
+    # ---------- a beta domain per server (owner, 2026-11-06) ----------
+    from app.models import Environment as _Env2, Server as _Srv2
+    from app.models.setting import get_setting as _gs2, set_setting as _ss2
+    srv_a, srv_b = _Srv2.query.order_by(_Srv2.id).all()[:2]
+    for k in ("server_beta_domains",):
+        _ss2(k, {})
+    db.session.commit()
+    ok(betas_mod.domain(srv_b) == "beta.ivinfotech.com" and betas_mod.domain(None) == "beta.ivinfotech.com", "without a setting every server uses the default beta domain")
+    r = c.post(f"/settings/servers/{srv_b.id}/beta-domain", data={"beta_domain": " *.Beta2.Example-Test.com "}, follow_redirects=True)
+    ok(_gs2("server_beta_domains") == {str(srv_b.id): "beta2.example-test.com"} and b"beta2.example-test.com" in r.data,
+       "the owner gives a server its own beta domain (typed any way: wildcard, capitals, spaces)")
+    ok(betas_mod.domain(srv_b) == "beta2.example-test.com" and betas_mod.domain(srv_a) == "beta.ivinfotech.com",
+       "only that server's betas move to the new domain")
+    ok(set(betas_mod.domains()) == {"beta.ivinfotech.com", "beta2.example-test.com"}, "the list of beta domains has both")
+    ok(betas_mod.is_beta_host("shop.beta2.example-test.com") and betas_mod.is_beta_host("x.beta.ivinfotech.com")
+       and not betas_mod.is_beta_host("shop.example-test.com") and not betas_mod.is_beta_host("beta2.example-test.com.evil.org")
+       and not betas_mod.is_beta_host("evilbeta2.example-test.com") and not betas_mod.is_beta_host(""), "a beta host must sit under a beta domain (nothing else is ever locked)")
+    lv2 = newp.env("live")
+    keep_srv = lv2.server_id
+    lv2.server_id = srv_b.id
+    db.session.commit()
+    ok(betas_mod.names(newp, fresh=True)["host"] == f"{newp.slug}.beta2.example-test.com", "a new / rebuilt beta's address follows its live server's beta domain")
+    ok(newp.env("beta").managed and betas_mod.names(newp)["host"] == (newp.env("beta").url.split("//")[-1]),
+       "a beta that already exists keeps its address when the server's beta domain changes")
+    ok(betas_mod.names(newp, server=srv_a)["host"] == f"{newp.slug}.beta.ivinfotech.com" and betas_mod.names(newp, server=None)["host"].endswith(".beta.ivinfotech.com"),
+       "names() can be asked for another server / the default")
+    lv2.server_id = keep_srv
+    db.session.commit()
+    r = c.get("/settings")
+    ok(b"beta2.example-test.com" in r.data and b"Beta domain for" in r.data, "Settings shows each server's beta domain")
+    lk = []
+    keep_run3 = remote_mod.run
+    remote_mod.run = lambda server, script, timeout=900: (lk.append(script), (0, "CHANGED=1"))[1]
+    ok(betas_mod.open_api.__doc__ is not None, "open_api still there")
+    bj = Job(project_id=newp.id, kind="beta_lock", state="running", note="t")
+    db.session.add(bj)
+    db.session.commit()
+    bt_env = newp.env("beta")
+    keep_url, keep_sid = bt_env.url, bt_env.server_id
+    bt_env.url, bt_env.server_id = f"https://{newp.slug}.beta2.example-test.com", srv_b.id
+    db.session.commit()
+    keep_health2 = deploy_mod.health_ok
+    deploy_mod.health_ok = lambda url, auth=None: (True, 401)          # a locked beta answers 401 without the password
+    try:
+        betas_mod.lock(bt_env, bj)
+        locked_ok = True
+    except Exception as e:
+        locked_ok = False
+    ok(locked_ok and any(f"{newp.slug}.beta2.example-test.com" in sc for sc in lk), "a beta under the server's own domain can be locked")
+    bt_env.url = "https://shop.not-a-beta.example.org"
+    db.session.commit()
+    lk.clear()
+    try:
+        betas_mod.lock(bt_env, bj)
+        refused = False
+    except deploy_mod.DeployError as e:
+        refused = "not a beta address" in str(e)
+    ok(refused and not lk, "a site outside the beta domains is never locked")
+    bt_env.url, bt_env.server_id = keep_url, keep_sid
+    bj.state = "done"
+    db.session.commit()
+    remote_mod.run = keep_run3
+    deploy_mod.health_ok = keep_health2
+
+    # what the owner may type
+    for bad, why in (("example.com", "two labels (a whole domain)"), ("beta2", "one word"), ("a b.example.com", "a space"),
+                     ("beta2.example.com/x", "a path"), ("beta2.-bad.example.com", "a label starting with -"), ("x" * 70 + ".example.com", "a label over 63 characters")):
+        before = _gs2("server_beta_domains")
+        c.post(f"/settings/servers/{srv_b.id}/beta-domain", data={"beta_domain": bad})
+        ok(_gs2("server_beta_domains") == before, f"{why} is refused")
+    keep_live_url = newp.env("live").url
+    newp.env("live").url = "https://app.shop.example-live.com"
+    db.session.commit()
+    for bad, why in (("app.shop.example-live.com", "a live site's own address"), ("shop.example-live.com", "a parent of a live site")):
+        before = _gs2("server_beta_domains")
+        c.post(f"/settings/servers/{srv_b.id}/beta-domain", data={"beta_domain": bad})
+        ok(_gs2("server_beta_domains") == before, f"{why} is refused as a beta domain")
+    # a separate sub-domain below a live site is fine (nothing live sits inside it), so it is accepted
+    before = _gs2("server_beta_domains")
+    c.post(f"/settings/servers/{srv_b.id}/beta-domain", data={"beta_domain": "x.app.shop.example-live.com"})
+    ok(_gs2("server_beta_domains").get(str(srv_b.id)) == "x.app.shop.example-live.com", "a name below a live site is accepted as a beta domain")
+    c.post(f"/settings/servers/{srv_b.id}/beta-domain", data={"beta_domain": before.get(str(srv_b.id), "")})
+    ok(_gs2("server_beta_domains") == before, "…and the earlier domain is put back")
+    newp.env("live").url = keep_live_url
+    db.session.commit()
+    before = _gs2("server_beta_domains")
+    r = c.post(f"/settings/servers/{srv_a.id}/beta-domain", data={"beta_domain": "beta2.example-test.com"}, follow_redirects=True)
+    ok(_gs2("server_beta_domains") == before and b"already used by another server" in r.data, "two servers can't share one beta domain")
+    r = c.post(f"/settings/servers/{srv_a.id}/beta-domain", data={"beta_domain": "BETA.ivinfotech.com"})
+    ok(_gs2("server_beta_domains") == before, "typing the default domain changes nothing")
+    ok(dv.post(f"/settings/servers/{srv_b.id}/beta-domain", data={"beta_domain": "beta3.example-test.com"}).status_code == 403, "only the owner can change a beta domain")
+    ok(c.post("/settings/servers/9999/beta-domain", data={"beta_domain": "beta3.example-test.com"}).status_code == 404, "unknown server → 404")
+
+    # DNS: the wildcard must lead to the server (the usual reason a new beta "does not answer"). Public DNS is asked directly
+    # (app/dnspin.py): the dashboard machine's own resolver answers every *.ivinfotech.com name with loopback.
+    from app import dnspin as dnspin_mod
+    real_pub, real_srv_addr = dnspin_mod.public_ips, betas_mod._server_addresses
+    pub = {"shop.beta2.example-test.com": ["198.51.100.7"], "x.beta.ivinfotech.com": ["198.51.100.8"]}
+    dnspin_mod.public_ips = lambda name, *a_, **k_: pub.get(name, [])
+    betas_mod._server_addresses = lambda server: {"93.184.216.34"}
+    msg = real_dns_problem("shop.beta2.example-test.com", srv_b)
+    ok("198.51.100.7" in msg and srv_b.name in msg and "93.184.216.34" in msg and "fix the DNS record" in msg,
+       "DNS check says where the address points and where it should")
+    pub["shop.beta2.example-test.com"] = ["93.184.216.34"]
+    ok(real_dns_problem("shop.beta2.example-test.com", srv_b) == "", "DNS check is quiet when the address leads to the server")
+    ok("no DNS record" in real_dns_problem("nope.beta2.example-test.com", srv_b), "DNS check says when there is no record")
+    msg = real_dns_problem("x.beta.ivinfotech.com", srv_b)
+    ok("another server" in msg and "Rebuild" in msg and "beta2.example-test.com" in msg and "fix the DNS record" not in msg,
+       "a beta still under the old wildcard is told to Rebuild, not to repoint the shared wildcard")
+    dnspin_mod.public_ips = lambda name, *a_, **k_: None
+    ok(real_dns_problem("shop.beta2.example-test.com", srv_b) == "" and real_dns_problem("x", None) == "", "a DNS outage is not reported as a wrong record")
+    dnspin_mod.public_ips = lambda name, *a_, **k_: ["198.51.100.7"]
+    betas_mod._server_addresses = lambda server: {"127.0.0.1"}
+    ok(real_dns_problem("shop.beta2.example-test.com", srv_b) == "", "a loopback / private server address can't be compared, so it is not called wrong")
+    betas_mod._server_addresses = real_srv_addr
+    ok(betas_mod._server_addresses(type("S", (), {"host": "203.0.113.5"})()) == {"203.0.113.5"}, "an IP address as the server's host is used as it is")
+
+    # the lookups themselves (standard library DNS over UDP) — no network here
+    import socket as _sock2
+    import struct as _st
+    qn = dnspin_mod._question("x.beta2.example-test.com")
+    resp = _st.pack(">HHHHHH", 4242, 0x8180, 1, 2, 0, 0) + qn + b"\xc0\x0c" + _st.pack(">HHIH", 5, 1, 300, 4) + b"\x01a\xc0\x0c" \
+        + b"\xc0\x0c" + _st.pack(">HHIH", 1, 1, 300, 4) + bytes([93, 184, 216, 34])
+    ok(dnspin_mod.parse(resp, 4242) == (0, ["93.184.216.34"]), "a DNS answer with a CNAME and a compressed name is read right")
+    ok(dnspin_mod.parse(_st.pack(">HHHHHH", 4242, 0x8183, 1, 0, 0, 0) + qn, 4242) == (3, []), "NXDOMAIN is read right")
+    try:
+        dnspin_mod.parse(resp, 4243)
+        wrong_id = False
+    except ValueError:
+        wrong_id = True
+    ok(wrong_id, "an answer to another question is refused")
+    answers = iter([OSError("timeout"), (2, []), (0, ["93.184.216.34"])])
+
+    def fake_ask(name, server, timeout):
+        a2 = next(answers)
+        if isinstance(a2, Exception):
+            raise a2
+        return a2
+    real_ask = dnspin_mod._ask
+    dnspin_mod._ask = fake_ask
+    ok(real_pub("x.example-test.com") == ["93.184.216.34"], "the next resolver is asked when one times out or fails (SERVFAIL)")
+    answers = iter([(3, []), (0, ["1.2.3.4"])])
+    ok(real_pub("nope.example-test.com") == [], "NXDOMAIN from a resolver is an answer: no such name")
+    answers = iter([OSError("t"), OSError("t"), OSError("t")])
+    ok(real_pub("x.example-test.com") is None, "when nobody answers nothing is known (None)")
+    dnspin_mod._ask = real_ask
+
+    # a beta under a server's own domain is reached at the address public DNS gives; other names are looked up as before
+    dnspin_mod.public_ips = lambda name, *a_, **k_: ["93.184.216.34"] if name.endswith(".beta2.example-test.com") else None
+    ctx_pin = deploy_mod.lookup_for("https://x.beta2.example-test.com/login")
+    with ctx_pin:
+        pinned_to = _sock2.getaddrinfo("x.beta2.example-test.com", 443, type=_sock2.SOCK_STREAM)[0][4][0]
+    ok(pinned_to == "93.184.216.34" and getattr(dnspin_mod._local, "pins", None) is None, "a beta under a server's own domain is reached at the public DNS address, only inside the check")
+    ok(type(deploy_mod.lookup_for("https://x.beta.ivinfotech.com/")).__name__ == "nullcontext" and type(deploy_mod.lookup_for("https://pawcount.com/")).__name__ == "nullcontext",
+       "betas under the default domain and live sites are looked up as before")
+    dnspin_mod.public_ips = lambda name, *a_, **k_: None
+    ok(type(deploy_mod.lookup_for("https://x.beta2.example-test.com/")).__name__ == "nullcontext", "no public answer → the normal lookup is used")
+    dnspin_mod.public_ips = real_pub
+
+    # the DNS mistake is caught before Claude starts, and named when the beta does not answer
+    spawned = len(cc_setup)
+    betas_mod.dns_problem = lambda host, server: f"{host} points to 198.51.100.7, but {server.name} is {server.host} — fix the DNS record"
+    db.session.refresh(newp)
+    newp.env("live").server_id = srv_b.id
+    db.session.commit()
+    c.post(f"/projects/{newp.id}/jobs/beta_setup")
+    jd = Job.query.order_by(Job.id.desc()).first()
+    ok(jd.kind == "beta_setup" and jd.state == "failed" and "198.51.100.7" in jd.note and len(cc_setup) == spawned,
+       "a beta whose DNS points elsewhere stops before Claude is started (no cost)")
+    keep_health = deploy_mod.health_ok
+    deploy_mod.health_ok = lambda url, auth=None: (False, 0)
+    smoke_job = Job(project_id=newp.id, kind="beta_deploy", state="running", note="t")
+    db.session.add(smoke_job)
+    db.session.commit()
+    ok("does not answer (no answer)" in betas_mod._smoke("https://x.beta2.example-test.com", smoke_job, None, srv_b)
+       and "198.51.100.7" in betas_mod._smoke("https://x.beta2.example-test.com", smoke_job, None, srv_b), "'does not answer' now names the DNS problem")
+    betas_mod.dns_problem = lambda host, server: ""
+    ok(betas_mod._smoke("https://x.beta2.example-test.com", smoke_job, None, srv_b) == "the beta address does not answer (no answer)", "without a DNS problem the message is as before")
+    deploy_mod.health_ok = keep_health
+    smoke_job.state = "done"
+    newp.env("live").server_id = keep_srv
+    db.session.commit()
+
+    # back to the default; removing a server drops its domain (an id can be reused)
+    c.post(f"/settings/servers/{srv_b.id}/beta-domain", data={"beta_domain": ""})
+    ok(_gs2("server_beta_domains") == {} and betas_mod.domain(srv_b) == "beta.ivinfotech.com", "an empty value puts the server back on the default domain")
+    c.post(f"/settings/servers/{srv_b.id}/beta-domain", data={"beta_domain": "beta2.example-test.com"})
+    spare = _Srv2(name="spare", host="203.0.113.77", port=22, ssh_user="deploy")
+    db.session.add(spare)
+    db.session.commit()
+    c.post(f"/settings/servers/{spare.id}/beta-domain", data={"beta_domain": "beta9.example-test.com"})
+    spare_id = spare.id
+    ok(_gs2("server_beta_domains").get(str(spare_id)) == "beta9.example-test.com", "a third server gets its own domain")
+    c.post(f"/settings/servers/{spare_id}/delete")
+    ok(str(spare_id) not in (_gs2("server_beta_domains") or {}) and _gs2("server_beta_domains").get(str(srv_b.id)) == "beta2.example-test.com",
+       "removing a server removes only its own beta domain")
+    betas_mod.dns_problem = lambda host, server: ""
+
+    # a beta made under a server's own domain keeps working when that domain is changed / cleared (its website is still there)
+    bta = newp.env("beta")
+    keep_beta = (bta.url, bta.server_id, bta.managed)
+    host2 = f"{newp.slug}.beta2.example-test.com"
+    bta.url, bta.server_id, bta.managed = f"https://{host2}", srv_b.id, True
+    newp.env("live").server_id = srv_b.id                      # the project's live site is on the server with its own beta domain
+    db.session.commit()
+    ok(betas_mod.names(newp)["host"] == host2 and betas_mod.is_beta_host(host2), "a beta under the server's own domain keeps its address")
+    c.post(f"/settings/servers/{srv_b.id}/beta-domain", data={"beta_domain": "beta3.example-test.com"})
+    ok(_gs2("server_beta_domains_legacy") == ["beta2.example-test.com"] and betas_mod.is_beta_host(host2) and betas_mod.names(newp)["host"] == host2,
+       "changing the domain keeps the old one known while a beta still uses it")
+    ok(betas_mod.names(newp, fresh=True)["host"] == f"{newp.slug}.beta3.example-test.com", "only a rebuild (fresh) moves the beta to the new domain")
+    c.post(f"/settings/servers/{srv_b.id}/beta-domain", data={"beta_domain": ""})
+    ok("beta2.example-test.com" in _gs2("server_beta_domains_legacy") and betas_mod.names(newp)["host"] == host2 and "beta3.example-test.com" not in _gs2("server_beta_domains_legacy"),
+       "clearing the domain doesn't strand the beta either (and the unused new domain is not remembered)")
+    lk2, keep_run4, keep_health4 = [], remote_mod.run, deploy_mod.health_ok
+    remote_mod.run = lambda server, script, timeout=900: (lk2.append(script), (0, "CHANGED=1"))[1]
+    deploy_mod.health_ok = lambda url, auth=None: (True, 401)
+    lj = Job(project_id=newp.id, kind="beta_lock", state="running", note="t")
+    db.session.add(lj)
+    db.session.commit()
+    betas_mod.lock(bta, lj)
+    ok(any(host2 in sc for sc in lk2), "a beta under a retired domain can still be locked")
+    lj.state = "done"
+    db.session.commit()
+    remote_mod.run, deploy_mod.health_ok = keep_run4, keep_health4
+    bta.url = f"https://{newp.slug}.beta.ivinfotech.com"          # as if it was rebuilt under the default domain
+    db.session.commit()
+    c.post(f"/settings/servers/{srv_b.id}/beta-domain", data={"beta_domain": "beta4.example-test.com"})
+    ok(_gs2("server_beta_domains_legacy") == [], "a retired domain is forgotten once no beta uses it")
+    bta.url = "https://a$(id).beta.ivinfotech.com"
+    db.session.commit()
+    nh = betas_mod.names(newp)["host"]
+    ok("$" not in nh and "(" not in nh and nh.startswith(newp.slug + "."), "a strange stored beta address is never used as the host (it goes into shell scripts)")
+
+    # an emptied "Beta address" in Project details leaves a dashboard-made beta where its website is
+    bta.url, bta.managed, bta.server_id = f"https://{host2}", True, srv_b.id
+    db.session.commit()
+    c.post(f"/projects/{newp.id}/details", data={"name": newp.name, "client": newp.client_name or "Client", "live_url": newp.env("live").url,
+                                                 "beta_url": "", "tech": "Laravel", "host_type": "vps", "repo": newp.github_repo or "", "active": "1"})
+    db.session.refresh(bta)
+    ok(bta.url == f"https://{host2}", "emptying the beta address does not re-address a beta that already exists")
+    c.post(f"/projects/{newp.id}/details", data={"name": newp.name, "client": newp.client_name or "Client", "live_url": newp.env("live").url,
+                                                 "beta_url": "https://elsewhere.beta.ivinfotech.com", "tech": "Laravel", "host_type": "vps", "repo": newp.github_repo or "", "active": "1"})
+    db.session.refresh(bta)
+    ok(bta.url == f"https://{host2}", "a posted address (e.g. from a form opened before a rebuild) does not move a dashboard-made beta either")
+
+    # a rebuild (beta_setup) alone sees the new address; every other tool follows the beta's recorded one
+    from app import beta_tools as _bt2
+    bta.url, bta.managed = f"https://{newp.slug}.beta.ivinfotech.com", True
+    newp.env("live").server_id = srv_b.id
+    db.session.commit()
+    sj = Job(project_id=newp.id, kind="beta_setup", state="running", note="t")
+    dj = Job(project_id=newp.id, kind="beta_deploy", state="running", note="t")
+    db.session.add_all([sj, dj])
+    db.session.commit()
+    new_host = f"{newp.slug}.beta4.example-test.com"
+    ok(_bt2._ctx(sj, fresh=True)[3]["host"] == new_host and _bt2._ctx(sj)[3]["host"] == f"{newp.slug}.beta.ivinfotech.com"
+       and _bt2._ctx(dj, fresh=True)[3]["host"] == f"{newp.slug}.beta.ivinfotech.com",
+       "only status / make_website of a beta_setup job use the new address; the other tools follow the recorded one")
+    keep_dp, keep_su = bta.deploy_path, bta.site_user
+    bta.deploy_path, bta.site_user = f"/home/{newp.slug}.beta.ivinfotech.com/public_html", "betauser1"
+    newp.beta_recipe = "echo old steps"
+    db.session.commit()
+    ok(_bt2._beta_ready(bta) is bta, "a beta whose folder belongs to its address is ready for the tools")
+    bta.deploy_path = "/home/some-other-site.example.org/public_html"
+    try:
+        _bt2._beta_ready(bta)
+        mismatch = False
+    except _bt2.ToolError as e:
+        mismatch = "call make_website first" in str(e)
+    ok(mismatch, "a beta whose folder does not belong to its address is refused by every tool but make_website")
+    bta.deploy_path = f"/home/{newp.slug}.beta.ivinfotech.com/public_html"
+    db.session.commit()
+    keep_run5, keep_health5 = remote_mod.run, deploy_mod.health_ok
+    remote_mod.run = setup_run
+    deploy_mod.health_ok = lambda url, auth=None: (True, 401)
+    msg_mw, err_mw = _bt2.call(sj, "make_website", {})
+    remote_mod.run, deploy_mod.health_ok = keep_run5, keep_health5
+    db.session.refresh(bta)
+    db.session.refresh(newp)
+    ok(not err_mw and bta.url == f"https://{new_host}" and bta.deploy_path == f"/home/{new_host}/public_html" and bta.managed, "a rebuild's make_website moves the beta to the new address")
+    ok(newp.beta_recipe == "" and "The old website is still on the server" in (db.session.get(Job, sj.id).output or "")
+       and ActivityLog.query.filter_by(action="Beta moved").count() == 1, "the old website is written down, and the old steps are dropped so Claude must save new ones")
+    bta.deploy_path, bta.site_user = keep_dp, keep_su
+    sj.state = dj.state = "done"
+    newp.env("live").server_id = keep_srv
+    bta.url, bta.server_id, bta.managed = keep_beta
+    db.session.commit()
+    c.post(f"/settings/servers/{srv_b.id}/beta-domain", data={"beta_domain": ""})
+    ok(_gs2("server_beta_domains") == {} and _gs2("server_beta_domains_legacy") == [], "beta-domain test data cleaned up")
 
     # owner can't be edited / switched off from the users list
     ok(c.post(f"/users/{owner.id}/access", data={"on": "0"}).status_code == 403, "owner account can't be turned off from the list")

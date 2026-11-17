@@ -1,5 +1,5 @@
 """Automatic beta environments (owner, 2026-10-17): one button (or the first change) gives any project its own beta at
-<project>.beta.ivinfotech.com — no hand work, whatever the tech.
+<project>.beta.ivinfotech.com (or <project>.<that server's own beta domain>, Settings → Servers) — no hand work, whatever the tech.
 
 Fixed steps (the dashboard, as root over SSH — the same every time):
   website + SSL (CyberPanel) · its own MySQL database + user, filled with a copy of live (live is only read) ·
@@ -17,7 +17,7 @@ import shlex
 
 from flask import current_app
 
-from app import deploy, remote
+from app import deploy, dnspin, remote
 from app import workspace as ws
 from app.alerts import raise_alert
 from app.auth import log
@@ -26,6 +26,7 @@ from app.deploy import DeployError, build_beta_branch
 from app.extensions import db
 from app.jobs import note
 from app.models import Deployment, Environment
+from app.models.setting import get_setting
 
 UPLOADS_COPY_LIMIT_MB = 500          # bigger upload folders are not copied (beta storage stays small)
 SETUP_TURNS, SETUP_USD = 80, 6.0
@@ -50,14 +51,132 @@ one shell command per line — the steps to run again in this folder after new c
 ```"""
 
 
-def domain():
+def default_domain():
     return current_app.config.get("BETA_DOMAIN") or "beta.ivinfotech.com"
 
 
-def names(project):
+def own_domains():
+    """{server id (str): domain} — servers that have their own beta domain (Settings → Servers)."""
+    raw = get_setting("server_beta_domains")
+    return {str(k): v.lower() for k, v in raw.items() if isinstance(v, str) and v} if isinstance(raw, dict) else {}
+
+
+def legacy_domains():
+    """Domains a server had before its beta domain was changed / cleared, while a beta made under them still exists.
+    Those betas keep working (lock, proxy, deploys); the entry is dropped the next time a beta domain is saved and no beta
+    sits under it any more."""
+    raw = get_setting("server_beta_domains_legacy")
+    return {v.lower() for v in raw if isinstance(v, str) and v} if isinstance(raw, list) else set()
+
+
+def domain(server=None):
+    """The domain a server's betas live under: its own (each server's wildcard DNS points at that server) or the default."""
+    sid = getattr(server, "id", None)
+    return (own_domains().get(str(sid)) if sid is not None else None) or default_domain()
+
+
+def domains():
+    """Every domain a beta may live under — the default, each server's own, and the retired ones still in use."""
+    return sorted({default_domain(), *own_domains().values(), *legacy_domains()})
+
+
+def uses_own_domain(host):
+    """Does this address sit under a domain that belongs to ONE server (its own or a retired one)? Those betas may be on a
+    machine other than the one running the dashboard, so the dashboard reaches them through public DNS (see dnspin)."""
+    host = (host or "").lower().rstrip(".")
+    return any(host.endswith("." + d) for d in {*own_domains().values(), *legacy_domains()})
+
+
+def is_beta_host(host):
+    """Is this a beta address (under one of the beta domains)? Only such sites may ever be locked / proxied by the dashboard."""
+    host = (host or "").lower().rstrip(".")
+    return any(host.endswith("." + d) for d in domains())
+
+
+_KEEP = object()
+_LABEL = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
+_HOST = re.compile(_LABEL + r"(?:\." + _LABEL + r"){2,}")
+
+
+def names(project, server=_KEEP, fresh=False):
+    """Beta website / database / user names of a project. A beta the dashboard already made keeps its own address (changing
+    a server's beta domain must not break it); otherwise — a new beta, a rebuild (fresh=True) or an explicit `server`
+    (None = the default domain) — the host sits under the beta domain of the server the project's live site is on."""
+    beta = project.env("beta")
+    keep = ""
+    if not fresh and server is _KEEP and beta is not None and beta.managed and beta.url:
+        keep = beta.url.split("//")[-1].split("/")[0].lower()
+        keep = keep if _HOST.fullmatch(keep) and is_beta_host(keep) else ""      # the address goes into shell scripts and paths
+    if server is _KEEP:
+        live = project.env("live")
+        server = live.server if live is not None else None
     slug = re.sub(r"[^a-z0-9-]", "-", project.slug.lower()).strip("-")[:40] or f"project-{project.id}"
     under = slug.replace("-", "_")
-    return {"host": f"{slug}.{domain()}", "db": f"{under[:40]}_beta", "dbuser": f"b_{under[:20]}_{project.id}"}
+    return {"host": keep or f"{slug}.{domain(server)}", "db": f"{under[:40]}_beta", "dbuser": f"b_{under[:20]}_{project.id}"}
+
+
+def clean_domain(raw, server=None, live_hosts=(), own_host=""):
+    """(domain, problem) for what the owner typed as a server's beta domain. '' = back to the default. The domain must be a
+    sub-domain of a domain the owner controls (3+ labels) and may never cover a live site, the dashboard itself, or another
+    server's beta domain — betas are created, locked and deleted under it."""
+    d = (raw or "").strip().lower()
+    for pre in ("https://", "http://"):
+        if d.startswith(pre):
+            d = d[len(pre):]
+    d = d.removeprefix("*.").strip("./ ")
+    if not d:
+        return "", ""
+    if len(d) > 100 or not _HOST.fullmatch(d):
+        return "", "Type a domain like beta2.example.com (the wildcard *.beta2.example.com must point at this server)."
+    if d == default_domain():
+        return "", ""
+    for h in {h.lower() for h in live_hosts if h} | ({own_host.lower()} if own_host else set()):
+        if d == h or h.endswith("." + d):
+            return "", f"{d} contains {h}, a site that is not a beta. Pick a separate sub-domain just for betas."
+    for sid, other in own_domains().items():
+        if other == d and sid != str(getattr(server, "id", None)):
+            return "", f"{d} is already used by another server — each server needs its own beta domain."
+    return d, ""
+
+
+def _addresses(name):
+    """IPv4 addresses of a name as THIS machine's resolver sees it (the SSH address of a server)."""
+    import socket
+    return {a[4][0] for a in socket.getaddrinfo(name, None, socket.AF_INET)}
+
+
+def _server_addresses(server):
+    import ipaddress
+    try:
+        return {str(ipaddress.IPv4Address(server.host))}
+    except ValueError:
+        pass
+    try:
+        return _addresses(server.host)
+    except OSError:
+        return set()
+
+
+def dns_problem(host, server):
+    """'' when `host` leads to the server (or this cannot be told); else one plain sentence about what is wrong. This is the
+    usual reason a new beta 'does not answer': the wildcard DNS of the beta domain points at another machine. Public DNS is
+    asked directly (dnspin) — this machine's own resolver answers *.ivinfotech.com names with loopback."""
+    import ipaddress
+    if server is None or not host:
+        return ""
+    got = dnspin.public_ips(host)
+    if got is None:
+        return ""                                                   # no public resolver answered: nothing is known
+    if not got:
+        return f"{host} has no DNS record yet"
+    want = {a for a in _server_addresses(server) if ipaddress.ip_address(a).is_global}
+    if not want or set(got) & want:
+        return ""                                                   # right machine — or the server's address is private: can't compare
+    own = domain(server)
+    if not host.endswith("." + own):
+        return (f"{host} belongs to another server's wildcard ({', '.join(sorted(got))}) — press “Rebuild beta automatically” "
+                f"to move it under {own}")
+    return f"{host} points to {', '.join(sorted(got))}, but {server.name} is {', '.join(sorted(want))} — fix the DNS record"
 
 
 def _q(v):
@@ -172,7 +291,7 @@ def allow_proxy(env, port, job):
     beta's service port to THIS beta's vhost (never the server-wide config); restarts the web server only when added."""
     import base64
     host = env.url.split("//")[-1].split("/")[0]
-    if not host.endswith("." + domain()) or not 6100 <= int(port) < 7000:
+    if not is_beta_host(host) or not 6100 <= int(port) < 7000:
         raise DeployError("Proxy entries are only made for beta websites and beta service ports (6100–6999).")
     block = base64.b64encode(PROXY_BLOCK.format(port=int(port)).encode()).decode()
     out = _run(env.server, f"""H={_q(host)}; V=/usr/local/lsws/conf/vhosts/$H/vhost.conf
@@ -247,7 +366,7 @@ def open_api(env, job, mode="spa", port=None):
     to the app's service with the app's own login. No change for other layouts. Returns True when changed."""
     import base64
     host = env.url.split("//")[-1].split("/")[0]
-    if not host.endswith("." + domain()):
+    if not is_beta_host(host):
         return False
     code = base64.b64encode(OPEN_API_PY.encode()).decode()
     extra = f" laravel {int(port)}" if mode == "laravel" else ""
@@ -327,8 +446,8 @@ def lock(env, job):
     every website is checked before and after; one that answered before and not after raises an alert."""
     import base64
     host = env.url.split("//")[-1].split("/")[0]
-    if not host.endswith("." + domain()):
-        raise DeployError(f"{host} is not a beta address (*.{domain()}) — not locking it.")
+    if not is_beta_host(host):
+        raise DeployError(f"{host} is not a beta address (*.{' / *.'.join(domains())}) — not locking it.")
     pw = decrypt_secret(env.beta_password_enc or "") or secrets.token_urlsafe(12)
     block = base64.b64encode(LOCK_BLOCK.format(mark=LOCK_MARK, host=host).encode()).decode()
     tag = "AIDASH_" + secrets.token_hex(4)
@@ -383,12 +502,14 @@ def _claude_as_site(job, beta, path, prompt):  # kept for reference: Claude as t
     return out
 
 
-def _smoke(url, job, auth=None):
+def _smoke(url, job, auth=None, server=None):
     """The beta answers (with its password), and secrets / git history are not reachable from the web."""
     note(job, "Checking the beta site")
     ok, status = deploy.health_ok(url, auth=auth)
     if not ok or status == 401:
-        return f"the beta address does not answer ({'no answer' if status == 0 else status})"
+        why = f"the beta address does not answer ({'no answer' if status == 0 else status})"
+        hint = dns_problem(url.split("//")[-1].split("/")[0], server)
+        return why + (f" — {hint}" if hint else "")
     for leak in ("/.env", "/.git/config"):
         leaked, code = deploy.exposed(url, leak, auth=auth)
         if leaked:
@@ -475,8 +596,11 @@ def run_setup(job):
     live = p.env("live")
     if live is None or live.server is None or not live.deploy_path:
         raise DeployError("Set the live server and folder first (Settings → Servers & deploy) — the beta is made as a copy of live.")
-    n = names(p)
+    n = names(p, fresh=True)                            # a rebuild moves the beta under its server's current beta domain
     url = f"https://{n['host']}"
+    wrong = dns_problem(n["host"], live.server)        # before Claude starts (it costs money): the address must already lead to this server
+    if wrong:
+        raise DeployError(f"The beta address is not ready: {wrong}. Fix it (Settings → Servers shows each server's beta domain), wait a few minutes, then try again.")
     note(job, "Claude is making the beta")
     text = _claude_tools(job, SETUP_PROMPT.format(url=url, tech=", ".join(p.tech_stack or []) or "unknown"))
     db.session.refresh(p)
@@ -484,7 +608,7 @@ def run_setup(job):
     note(job, "", "Claude's note:\n" + text[-3000:])
     if beta is None or not beta.managed:
         raise DeployError("Claude stopped before the beta website existed. Its note is below.")
-    problem = _smoke(beta.url, job, beta_auth(beta))
+    problem = _smoke(beta.url, job, beta_auth(beta), beta.server)
     db.session.add(Deployment(project_id=p.id, environment_id=beta.id, commit=beta.current_commit or "-", change_ids=[],
                               by_user_id=job.by_user_id, result="failed" if problem else "ok",
                               note=("Beta made by Claude" + (f" — {problem}" if problem else ""))[:255]))
@@ -596,7 +720,7 @@ def run_managed_deploy(job):
             note(job, "", "Claude's note:\n" + text[-2000:])
             fixed = True
     db.session.refresh(beta)
-    problem = _smoke(beta.url, job, beta_auth(beta))
+    problem = _smoke(beta.url, job, beta_auth(beta), beta.server)
     db.session.add(Deployment(project_id=p.id, environment_id=beta.id, commit=beta.current_commit or "-", change_ids=[],
                               by_user_id=job.by_user_id, result="failed" if problem else "ok",
                               note=("New beta version" + (" · Claude fixed a step" if fixed else "") + (f" — {problem}" if problem else ""))[:255]))

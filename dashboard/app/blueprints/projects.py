@@ -89,7 +89,15 @@ def detail(project_id):
                            beta_login=__import__("app.betas", fromlist=["beta_auth"]).beta_auth(p.env("beta")),
                            repo_problem=__import__("app.gitcheck", fromlist=["problem"]).problem(p, p.env("live")),
                            beta_names=__import__("app.betas", fromlist=["names"]).names(p),
+                           beta_ours=_beta_is_ours(p),
                            can_make_beta=__import__("app.betas", fromlist=["can_make_beta"]).can_make_beta(p))
+
+
+def _beta_is_ours(p):
+    """The project's beta sits under one of the dashboard's beta domains (so the dashboard may lock it)."""
+    from app import betas
+    beta = p.env("beta")
+    return bool(beta is not None and beta.server_id and betas.is_beta_host((beta.url or "").split("//")[-1].split("/")[0]))
 
 
 @bp.post("/projects/<int:project_id>/settings")
@@ -133,9 +141,21 @@ def save_details(project_id):
     live_url, beta_url = _url(f.get("live_url")), _url(f.get("beta_url"))
     repo = (f.get("repo") or "").strip().strip("/")
     tech = [t.strip() for t in (f.get("tech") or "").split(",") if t.strip()][:6]
-    if not beta_url:                                   # empty = Claude makes it at <project>.beta.ivinfotech.com
+    eb = p.env("beta")
+    if eb is not None and eb.managed and eb.url:
+        beta_url = eb.url                              # the dashboard's own beta stays where its website is (only Rebuild moves it)
+    if not beta_url:                                   # empty = Claude makes it at <project>.<beta domain of the live server>
         from app.betas import names
-        beta_url = "https://" + names(p)["host"]
+        from app.models import Server as _Server
+        pick0 = f.get("server")
+        if pick0 is not None and pick0.startswith("s:") and pick0[2:].isdigit():
+            beta_server = db.session.get(_Server, int(pick0[2:]))
+        elif pick0 in ("", "cpanel"):
+            beta_server = None                         # no server chosen: the default beta domain
+        else:                                          # "keep": the live site's server as it is now
+            live0 = p.env("live")
+            beta_server = live0.server if live0 is not None else None
+        beta_url = "https://" + names(p, server=beta_server)["host"]
     err = (not name and "Enter the project name.") or (not client and "Enter the client name.") or \
           (not live_url and "Enter the live address.") or \
           (repo and repo.count("/") != 1 and "GitHub repo looks like owner/name.") or None

@@ -171,9 +171,25 @@ def _require(env, what):
         raise DeployError(f"Set the {what} server and folder first (project → Settings → Servers & deploy).")
 
 
+def lookup_for(url):
+    """Context for a request to `url`. A beta under a server's OWN beta domain is looked up through public DNS and reached
+    at that address (this machine's resolver is wrong for ivinfotech.com names — see dnspin); everything else as before."""
+    import contextlib
+    from urllib.parse import urlsplit
+
+    from app import betas, dnspin
+    host = (urlsplit(url).hostname or "").lower()
+    if host and betas.uses_own_domain(host):
+        ips = dnspin.public_ips(host)
+        if ips:
+            return dnspin.pinned(host, ips[0])
+    return contextlib.nullcontext()
+
+
 def health_ok(url, auth=None):
     try:
-        r = requests.get(url, timeout=15, allow_redirects=True, headers={"User-Agent": "ai-project-dashboard"}, auth=auth)
+        with lookup_for(url):
+            r = requests.get(url, timeout=15, allow_redirects=True, headers={"User-Agent": "ai-project-dashboard"}, auth=auth)
         return 200 <= r.status_code < 500, r.status_code
     except requests.RequestException:
         return False, 0
@@ -186,8 +202,9 @@ def exposed(base_url, path, auth=None):
     """Is a secret file really readable from the web? A 200 alone proves nothing: single-page apps (React, Vue…) answer
     every unknown address with their own index.html. Only real settings / git content counts."""
     try:
-        r = requests.get(base_url.rstrip("/") + path, timeout=15, allow_redirects=True, auth=auth,
-                         headers={"User-Agent": "ai-project-dashboard"})
+        with lookup_for(base_url):
+            r = requests.get(base_url.rstrip("/") + path, timeout=15, allow_redirects=True, auth=auth,
+                             headers={"User-Agent": "ai-project-dashboard"})
     except requests.RequestException:
         return False, 0
     if r.status_code != 200:

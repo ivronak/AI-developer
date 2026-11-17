@@ -562,7 +562,7 @@
       {% else %}
         <p class="hint">The dashboard can make this project's beta by itself at <span class="mono">{{ beta_names.host }}</span>: website, a copy of the live database, the code, and Claude sets the app up — any tech. Live is only read. It also starts by itself after the first change when no beta exists.</p>
       {% endif %}
-      {% if beta and beta.server_id and beta.url.endswith(".beta.ivinfotech.com") %}
+      {% if beta_ours %}
         <form method="post" action="{{ url_for('projects.start_job', project_id=p.id, kind='beta_lock') }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           {% if beta_login %}<input type="hidden" name="new_password" value="1">{% endif %}

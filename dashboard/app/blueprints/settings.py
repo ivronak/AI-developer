@@ -32,6 +32,7 @@ def _public_key():
 @login_required
 @owner_required
 def index():
+    from app import betas
     token = decrypt_secret(get_setting("github_token_enc") or "")
     new_projects = Project.query.filter_by(needs_setup=True).order_by(Project.created_at.desc()).all()
     missing = Project.query.filter_by(repo_missing=True).order_by(Project.name).all()
@@ -53,6 +54,7 @@ def index():
                            MODELS=MODELS, PRESETS=PRESETS,
                            month_cost=float(month_cost or 0), ai_key_expires=get_setting("claude_key_expires"),
                            expiries=reminders.summary(), servers=Server.query.order_by(Server.name).all(),
+                           beta_own=betas.own_domains(), beta_default=betas.default_domain(),
                            ssh_public_key=_public_key(),
                            cc_last=get_setting("cc_last_test") or "",
                            CC=cc_models.load(), cc_default=cc_models.default_choice(), cc_levels=cc_models.LEVELS,
@@ -285,6 +287,43 @@ def server_add():
     return redirect(url_for("settings.index") + "#servers")
 
 
+@bp.post("/settings/servers/<int:server_id>/beta-domain")
+@login_required
+@owner_required
+def server_beta_domain(server_id):
+    """The domain this server's betas are made under (<project>.<domain>). The owner points a wildcard DNS record
+    (*.<domain>) at the server; empty = the default beta domain. Betas that already exist keep their address."""
+    from app import betas
+    from app.models import Environment
+    s = db.session.get(Server, server_id) or abort(404)
+    live_hosts = [(e.url or "").split("//")[-1].split("/")[0] for e in Environment.query.filter_by(kind="live").all()]
+    d, err = betas.clean_domain(request.form.get("beta_domain"), s, live_hosts, request.host.split(":")[0])
+    if err:
+        flash(err, "bad")
+        return redirect(url_for("settings.index") + "#servers")
+    mine = dict(betas.own_domains())
+    old = mine.get(str(s.id))
+    if d:
+        mine[str(s.id)] = d
+    else:
+        mine.pop(str(s.id), None)
+    set_setting("server_beta_domains", mine)
+    # A beta made under the old domain keeps that address (its website exists there): keep the old domain known while any
+    # dashboard-made beta still sits under it, so lock / proxy / deploys keep working; drop retired domains nobody uses.
+    hosts = [(e.url or "").split("//")[-1].split("/")[0].lower() for e in Environment.query.filter_by(kind="beta", managed=True).all()]
+    legacy = set(betas.legacy_domains()) | ({old} if old and old != d else set())
+    current = set(mine.values()) | {betas.default_domain()}
+    set_setting("server_beta_domains_legacy", sorted(x for x in legacy if x not in current and any(h.endswith("." + x) for h in hosts)))
+    shown = d or betas.default_domain()
+    log("Settings", details=f"Server {s.name}: beta domain {shown}")
+    db.session.commit()
+    flash(f"New betas on “{s.name}” are made at <project>.{shown}. Betas that already exist keep their address until you rebuild them.", "ok")
+    wrong = betas.dns_problem(f"dns-check.{shown}", s)
+    if wrong:
+        flash(f"{wrong}. New betas on this server will not answer until it is fixed.", "bad")
+    return redirect(url_for("settings.index") + "#servers")
+
+
 @bp.post("/settings/servers/<int:server_id>/test")
 @login_required
 @owner_required
@@ -332,6 +371,9 @@ def server_delete(server_id):
         flash(f"“{s.name}” is still used by {used} beta / live site{'s' if used != 1 else ''}. Change those projects first.", "bad")
         return redirect(url_for("settings.index") + "#servers")
     log("Settings", details=f"Server removed: {s.name}")
+    mine = dict(get_setting("server_beta_domains") or {})
+    if mine.pop(str(s.id), None) is not None:         # a later server may get the same id — it must not inherit this domain
+        set_setting("server_beta_domains", mine)
     db.session.delete(s)
     db.session.commit()
     flash("Server removed.", "ok")

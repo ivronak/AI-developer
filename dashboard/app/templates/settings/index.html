@@ -278,6 +278,12 @@
                 {% if s.host_key %}<form method="post" action="{{ url_for('settings.server_forget_key', server_id=s.id) }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm" type="submit" title="Only if the server was rebuilt / moved">Forget host key</button></form>{% endif %}
                 <form method="post" action="{{ url_for('settings.server_delete', server_id=s.id) }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm" type="submit">Remove</button></form>
               </span></div>
+            <form method="post" action="{{ url_for('settings.server_beta_domain', server_id=s.id) }}" class="field beta-domain" style="margin:2px 0 14px">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <label for="bd-{{ s.id }}">Beta domain for “{{ s.name }}”
+                <span class="hint">Betas made on this server get the address <span class="mono">&lt;project&gt;.{{ beta_own.get(s.id|string) or beta_default }}</span>. Add a wildcard DNS record <span class="mono">*.{{ beta_own.get(s.id|string) or beta_default }}</span> → <span class="mono">{{ s.host }}</span> first. Betas that already exist keep their address until rebuilt. Empty = the default (<span class="mono">{{ beta_default }}</span>).</span></label>
+              <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="bd-{{ s.id }}" name="beta_domain" class="mono" style="flex:1 1 220px;min-width:0" value="{{ beta_own.get(s.id|string, '') }}" placeholder="{{ beta_default }}" autocomplete="off"><button class="btn btn-sm" type="submit">Save</button></div>
+            </form>
           {% endfor %}
         </div>
       {% endif %}

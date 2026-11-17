@@ -25,6 +25,8 @@ DEFAULTS = {
     "cc_default_effort": "",         # pre-selected effort in the chat; "" = the model's own default
     "cc_credit_models": {},          # {"fable": "2026-10-23"} — models Claude Code refused for lack of usage credits (picker warns)
     "repo_aliases": {},           # {"oldowner/name": {"id": 123, "full_name": "newowner/name"}} — old names a server still uses
+    "server_beta_domains": {},    # {"<server id>": "beta2.example.com"} — the domain a server's betas live under (empty = the default)
+    "server_beta_domains_legacy": [],   # ["beta2.example.com"] — a replaced / cleared domain that betas made under it still use
     "ai_low_balance_usd": 5.0,    # Telegram alert when the estimated Anthropic balance falls below this (Step 13)
     "ai_alert_state": {},         # {"low": true, "limits": {"<project id>": "2026-10:80"}, "credit": "2026-10-15"} — each alert once
 }
