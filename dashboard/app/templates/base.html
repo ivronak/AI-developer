@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/ui.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/v2.css') }}">
   {% block head %}{% endblock %}
   <script src="{{ url_for('static', filename='js/ui.js') }}" defer></script>
   {% block scripts %}{% endblock %}
@@ -26,6 +27,7 @@
     <div class="topbar-in">
       <a class="brand" href="{{ url_for('main.projects') }}" aria-label="{{ APP_NAME }} — home">
         <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 7h14M5 12h10M5 17h6"/></svg></span>
+        <span class="brand-name">{{ APP_NAME }}</span>
       </a>
       <nav class="crumbs" aria-label="Breadcrumb">
         <a href="{{ url_for(sec[1]) }}">{{ sec[0] }}</a>
@@ -72,6 +74,7 @@
   </section>
 
   <main class="page" id="main">
+    {% if crumb and crumb != sec[0] and crumb != "Overview" %}<nav class="crumbs crumbs-main" aria-label="Breadcrumb"><a href="{{ url_for(sec[1]) }}">{{ sec[0] }}</a><span class="sep">/</span><strong>{{ crumb }}</strong></nav>{% endif %}
     {% block content %}{% endblock %}
   </main>
 

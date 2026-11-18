@@ -1,0 +1,77 @@
+/* v2 — visual refresh layer (UI only). Loaded last; delete the <link> in base.html to get the previous look back.
+   Calm neutral surfaces, colour only for meaning, left sidebar on desktop, consistent motion. */
+
+:root {
+  --r-sm: 8px; --r-md: 10px; --r-lg: 14px;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 1px 3px rgba(16, 24, 40, .04);
+  --shadow-pop: 0 8px 24px rgba(16, 24, 40, .08), 0 2px 6px rgba(16, 24, 40, .04);
+  --dur-fast: 120ms; --dur-base: 180ms;
+  --ease-out: cubic-bezier(.22, 1, .36, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --shadow: 0 1px 2px rgba(0, 0, 0, .4); --shadow-pop: 0 8px 24px rgba(0, 0, 0, .5); }
+}
+:root[data-theme="dark"] { --shadow: 0 1px 2px rgba(0, 0, 0, .4); --shadow-pop: 0 8px 24px rgba(0, 0, 0, .5); }
+
+/* ---------- Motion: one set of timings, press feedback, focus ---------- */
+.btn, .icon-btn, .inav, .tabs-sm button, .view-toggle button, .seg-sm button, .pcard, .kpi, .ov-card, .repo, .chip {
+  transition: background var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out), transform var(--dur-fast) var(--ease-out), color var(--dur-fast);
+}
+.btn:active, .icon-btn:active { transform: scale(.97); }
+.btn-primary { box-shadow: 0 1px 2px rgba(79, 70, 229, .25); }
+.btn-primary:hover { filter: none; background: color-mix(in srgb, var(--accent) 88%, #000); }
+.toast { animation-duration: var(--dur-base); }
+.tab-panel:not([hidden]) { animation: v2-fade var(--dur-base) var(--ease-out); }
+@keyframes v2-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* ---------- Surfaces: neutral cards, colour is only a small accent ---------- */
+.ov-card, .card, .plist, .rows { box-shadow: var(--shadow); }
+.kpi { background: var(--surface); border-color: var(--line); box-shadow: var(--shadow); padding: 16px; }
+.kpi:hover { box-shadow: var(--shadow-pop); transform: translateY(-1px); }
+.kpi b { color: var(--fg); font-size: 26px; letter-spacing: -.02em; }
+.kpi[aria-pressed="true"] { border-color: hsl(var(--h) var(--solid-s) var(--solid-l)); box-shadow: 0 0 0 1px hsl(var(--h) var(--solid-s) var(--solid-l)), var(--shadow); }
+.kpi-ic { width: 34px; height: 34px; border-radius: 9px; }
+.kpi.alarm { background: var(--surface); border-color: var(--bad); }
+.hero { background: var(--surface); border-color: var(--line); box-shadow: var(--shadow); }
+.pcard { box-shadow: var(--shadow); }
+.pcard:hover { box-shadow: var(--shadow-pop); }
+.tabs-sm button[aria-pressed="true"], .tabs-sm button.is-on { font-weight: 600; }
+
+/* bugs seen in the old layout (visual only) */
+.act-list li.act-day { display: block; padding-left: 0; }
+.panel-scroll > ul, .att-list { align-content: start; }
+
+/* ---------- Desktop shell: left sidebar (phones keep the top bar + bottom tab bar) ---------- */
+.brand-name { display: none; }
+.crumbs-main { display: none; }
+@media (min-width: 900px) {
+  body { padding-left: var(--side-w); }
+  .topbar {
+    position: fixed; z-index: 25; top: 0; left: 0; bottom: 0; width: var(--side-w);
+    background: var(--surface); border-bottom: 0; border-right: 1px solid var(--line);
+    -webkit-backdrop-filter: none; backdrop-filter: none;
+  }
+  .topbar-in { max-width: none; height: 100%; min-height: 0; flex-direction: column; align-items: stretch; gap: 20px; padding: 16px 12px; }
+  .topbar .brand { align-items: center; gap: 10px; padding: 2px 8px; }
+  .brand-name { display: inline; font-weight: 700; font-size: 16px; letter-spacing: -.01em; color: var(--fg); }
+  .topbar .crumbs { display: none; }
+  .inavs { display: flex; flex-direction: column; align-items: stretch; gap: 2px; padding: 0; border: 0; border-radius: 0; background: none; }
+  .inav { height: 38px; padding: 0 12px; gap: 12px; border-radius: var(--r-md); font-weight: 500; font-size: 14px; }
+  .inav .inav-l { display: inline; }
+  .inav:hover { background: var(--surface-2); }
+  .inav.is-on { background: var(--surface-2); color: var(--fg); box-shadow: none; padding: 0 12px; font-weight: 600; }
+  .inav.is-on svg { color: var(--accent); }
+  .inav[data-tip]:hover::after, .top-actions [data-tip]:hover::after { display: none; }
+  .top-actions { margin-top: auto; flex-wrap: wrap; justify-content: space-between; gap: 2px; border-top: 1px solid var(--line); padding-top: 12px; }
+  .me { order: -1; flex: 1 1 100%; margin: 0 0 6px; padding: 8px; border: 0; border-radius: var(--r-md); }
+  a.me:hover { background: var(--surface-2); }
+  .page { padding-block: 24px 48px; }
+  .crumbs-main { display: flex; font-size: 13.5px; margin-bottom: -6px; }
+  .alerts-panel { top: auto; bottom: 16px; left: calc(var(--side-w) + 12px); right: auto; width: 360px; max-height: 70vh; overflow: auto; }
+}
+
+/* project cards: the three numbers sit in one row */
+.pcard .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 420px) { .pcard .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.brand-name { line-height: 1.15; }
