@@ -303,7 +303,7 @@
       var t = document.getElementById((a.getAttribute("href") || "").slice(1)); if (t && t.tagName === "DETAILS") t.open = true;
     });
     openHash(); window.addEventListener("hashchange", openHash);
-    var notes = document.querySelectorAll(".page > .pc-now.wrap");
+    var notes = document.querySelectorAll(".page > .pc-now.wrap:not(.chip-note), .note-row > .pc-now.wrap:not(.chip-note)");
     for (i = 0; i < notes.length; i++) (function (n) {
       if (!n.querySelector("small")) return; n.setAttribute("data-more", "1");
       n.addEventListener("click", function (e) { if (e.target.closest("a")) return; n.classList.toggle("is-open"); });

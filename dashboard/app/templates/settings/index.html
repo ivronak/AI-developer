@@ -8,8 +8,10 @@
   {% for label, d, left in expiries if d and left is not none and left <= 14 %}
     <div class="pc-now wrap {{ 's-bad' if left <= 1 else 's-warn' }}">{{ icon('alert') }}<span>{{ label }} {{ "expired" if left < 0 else "expires" }} on {{ d.strftime("%-d %b %Y") }}{% if left >= 0 %} ({{ left }} day{{ "" if left == 1 else "s" }} left){% endif %}<small>Make a new one and paste it below before then.</small></span></div>
   {% endfor %}
+  <div class="note-row">
   {% if code_guard %}
-    <div class="pc-now wrap {{ 's-ok' if code_guard.ok and not code_guard.stale else 's-bad' }}">{{ icon('check' if code_guard.ok and not code_guard.stale else 'alert') }}<span>
+    {% set cg_ok = code_guard.ok and not code_guard.stale %}
+    <div class="pc-now wrap {{ 's-ok chip-note' if cg_ok else 's-bad' }}"{% if cg_ok %} data-label="Code protection" tabindex="0"{% endif %}>{{ icon('check' if code_guard.ok and not code_guard.stale else 'alert') }}<span>
       {% if code_guard.stale %}Code protection has not reported for {{ code_guard.age_minutes if code_guard.age_minutes is not none else "a long time" }} minutes — the guard may have stopped.
       {% elif code_guard.ok %}Code protection is on: the dashboard's code is exactly the last saved checkpoint{% if code_guard.checkpoint.message %} (“{{ code_guard.checkpoint.message }}”){% endif %}. Checked {{ code_guard.age_minutes }} min ago.
       {% else %}Code protection found a problem: {{ code_guard.problems|join(" · ") }}{% endif %}
@@ -17,7 +19,7 @@
   {% endif %}
   {% if rootd_state %}
     {% set root_ok = rootd_state.available and rootd_state.enrolled and not rootd_state.locked and rootd_runner_ok %}
-    <div class="pc-now wrap {{ 's-ok' if root_ok else 's-warn' }}">{{ icon('check' if root_ok else 'alert') }}<span>
+    <div class="pc-now wrap {{ 's-ok chip-note' if root_ok else 's-warn' }}"{% if root_ok %} data-label="Root commands" tabindex="0"{% endif %}>{{ icon('check' if root_ok else 'alert') }}<span>
       {% if not rootd_state.available %}Root commands are off: the root service is not running on the server.
       {% elif not rootd_state.enrolled %}Root commands are not set up yet. One step on the server: <span class="mono">aidash-rootd enroll</span> (it links an authenticator app).
       {% elif rootd_state.locked %}Root commands are locked for about {{ (rootd_state.retry_after // 60) + 1 }} more minute(s) after wrong codes.
@@ -25,6 +27,7 @@
       {% else %}Root commands are ready: Claude can ask to run a command as root — only after you read it and type a fresh authenticator code.{% endif %}
       <small>Every root command is logged on the server in <span class="mono">/var/log/aidash-rootd.log</span>. To switch it off: <span class="mono">systemctl disable --now aidash-rootd</span>.</small></span></div>
   {% endif %}
+  </div>
   {% set cc_ok_n = (cc_accounts|selectattr("a.status", "equalto", "ok")|list|length) if cc_accounts else 0 %}
   <nav class="jump" aria-label="Jump to a section">
     <a href="#github">{{ icon('github') }}GitHub</a><a href="#claude">Claude API</a><a href="#claude-code">Claude Code</a><a href="#codemagic">Codemagic</a><a href="#telegram">Telegram</a><a href="#servers">Servers</a><a href="#monitor">Site monitor</a>
@@ -56,7 +59,7 @@
       {% set ghx = expiries[0] %}
       {% if ghx[1] %}<p class="hint">Token expires on <strong>{{ ghx[1].strftime("%-d %b %Y") }}</strong> (read from GitHub) — Telegram reminder 7 days and 1 day before.</p>{% endif %}
       <div class="switch-row">
-        <p class="hint">Last sync: <strong>{{ gh_last[:16].replace("T", " ") ~ " UTC" if gh_last else "never" }}</strong>{% if gh_result %} · {{ gh_result }}{% endif %}</p>
+        <p class="hint meta">Last sync: <strong>{{ gh_last[:16].replace("T", " ") ~ " UTC" if gh_last else "never" }}</strong>{% if gh_result %} · {{ gh_result }}{% endif %}</p>
         <div class="chip-row">
           <form method="post" action="{{ url_for('settings.test_github') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm" type="submit">Test connection</button></form>
           <form method="post" action="{{ url_for('settings.sync_now') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-primary" type="submit">{{ icon('sync') }}Sync now</button></form>
@@ -89,7 +92,7 @@
       <summary class="set-sum"><span class="h-ic" style="--h:265">{{ icon('activity') }}</span><span class="set-t"><strong>Claude API key</strong><small>Key for projects that run on the Claude API</small></span>{% if ai_key_mask %}<span class="pill pill-ok">Key saved</span>{% else %}<span class="pill pill-muted">No key</span>{% endif %}</summary>
       <div class="set-body">
       <p class="hint">The chat on each project sends the request to Claude with this API key. Claude works only on the change's own branch, runs the tests and pushes the branch — it can't deploy or reach any server.</p>
-      <p class="hint">Spent this month: <strong>${{ "%.2f"|format(month_cost) }}</strong></p>
+      <p class="hint meta">Spent this month: <strong>${{ "%.2f"|format(month_cost) }}</strong></p>
       <form method="post" action="{{ url_for('settings.save_claude') }}" class="form-grid">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="field"><label for="ai-key">Anthropic API key {% if ai_key_mask %}<span class="hint">(saved: <span class="mono">{{ ai_key_mask }}</span> — leave empty to keep it)</span>{% endif %}</label>
@@ -131,8 +134,8 @@
               <p class="hint">
                 {% if a.status == "ok" %}{{ (a.plan or "plan not shown")|title }}{% if a.email_hint %} · {{ a.email_hint }}{% endif %} · {{ row.models }} model{{ "" if row.models == 1 else "s" }}{% if a.connectors %} · connectors: {{ a.connectors|map(attribute="name")|join(", ") }}{% endif %}{% if a.expires_at %} · login {{ row.left }}{% endif %}{% endif %}
                 {% if a.last_error %}{{ a.last_error }}{% endif %}
-                {% if a.checked_at %} · checked {{ a.checked_at|stamp }}{% endif %}
-                {% if not a.slug %} · the server user's own login{% endif %}
+                {% if a.checked_at %}{% if a.status == "ok" or a.last_error %} · {% endif %}Checked {{ a.checked_at|stamp }}{% endif %}
+                {% if not a.slug %}{% if a.checked_at or a.status == "ok" or a.last_error %} · {% endif %}the server user's own login{% endif %}
               </p>
               {% if row.login_url %}
                 <div class="acc-login">
@@ -207,7 +210,7 @@
         <p class="hint">The model list is not available yet, so the chat shows Quick / Normal / Best. The hourly job (<span class="mono">ai-dashboard-models.timer</span>) writes <span class="mono">/etc/ai-dashboard/claude-models.json</span>; once that file exists the chat offers Claude Code's real model list.</p>
       {% endif %}
       <div class="switch-row">
-        <p class="hint">Last test: <strong>{{ cc_last or "never" }}</strong> · Projects using it: <strong>{{ cc_projects|map(attribute="name")|join(", ") or "none yet" }}</strong></p>
+        <p class="hint meta">Last test: <strong>{{ cc_last or "never" }}</strong> · Projects using it: <strong>{{ cc_projects|map(attribute="name")|join(", ") or "none yet" }}</strong></p>
         <form method="post" action="{{ url_for('settings.test_cc') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm" type="submit">Test Claude Code</button></form>
       </div>
     </div></details>
@@ -230,7 +233,7 @@
           {% if cm_token_mask %}<button class="btn btn-danger" type="submit" name="clear" value="1">Remove token</button>{% endif %}</div>
       </form>
       <div class="switch-row">
-        <p class="hint">Last test: <strong>{{ cm_last or "never" }}</strong></p>
+        <p class="hint meta">Last test: <strong>{{ cm_last or "never" }}</strong></p>
         <form method="post" action="{{ url_for('settings.test_codemagic') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm" type="submit">Test Codemagic</button></form>
       </div>
     </div></details>
@@ -325,7 +328,7 @@
       <summary class="set-sum"><span class="h-ic" style="--h:150">{{ icon('activity') }}</span><span class="set-t"><strong>Site monitor</strong><small>Opens every live site every 5 minutes</small></span>{% if watched %}<span class="pill pill-ok">Watching {{ watched|length }}</span>{% else %}<span class="pill pill-muted">Nothing watched</span>{% endif %}</summary>
       <div class="set-body">
       <p class="hint">Every 5 minutes each watched project's live site is opened once. Down twice in a row (about 10 minutes) or the home page text changed twice in a row → red + alert. It only reads the home page; it never changes anything on the server.</p>
-      <p class="hint">Last check: <strong>{{ mon_last[:16].replace("T", " ") ~ " UTC" if mon_last else "never" }}</strong> · Watching <strong>{{ watched|length }}</strong> site{{ "" if watched|length == 1 else "s" }}. Turn watching on / off in each project's Settings tab.</p>
+      <p class="hint meta">Last check: <strong>{{ mon_last[:16].replace("T", " ") ~ " UTC" if mon_last else "never" }}</strong> · Watching <strong>{{ watched|length }}</strong> site{{ "" if watched|length == 1 else "s" }}. Turn watching on / off in each project's Settings tab.</p>
       {% if watched %}
         <div class="rows">
           {% for p in watched %}{% set lv = p.env("live") %}
