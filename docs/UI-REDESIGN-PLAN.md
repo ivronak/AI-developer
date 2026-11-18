@@ -127,3 +127,11 @@ System (static/css/tokens.css + v3.css, loaded last):
 - Radii 6 / 8 / 12, 1 px borders, no card shadows (shadow only on floating layers), compact controls (34–36 px), 14 px base type, tabular numbers.
 - KPIs are one bordered strip (label over number, no icon tiles); tabs are underline tabs; status = dot + label, soft pills for problems.
 Revert: remove the v3 `<link>` in base.html (and the token block in tokens.css via git).
+
+## 13. Structure v3.1 (2026-11-18) — content first, context in a rail
+Research: Mobbin — Linear / Asana / Coda / Remote (detail page = main + right "properties" rail), Asana / Airtable / Todoist / Height (project lists with status dots in the sidebar, "recent projects"), Vercel / Juicebox / ClickUp (table or grid on the left, context column on the right); dashboard IA articles (critical info top-left, summary → context → detail, progressive disclosure).
+Built (UI only, CSS grid + one `<aside>` wrapper + small JS):
+- Projects: left = toolbar, KPI strip, filter bar, projects (list view is remembered); right rail (340 px) = AI spend, health ring + attention rows, activity, approvals. Projects are visible on the first screen. Below 1280 px it falls back to one column.
+- Project page: left = tabs + chat; sticky right rail (320 px) = Beta, Live (living dot), live-vs-main. The rail is `<aside class="p-rail">` in detail.html.
+- Sidebar: "Needs attention" (red/amber dots) and "Recent" project links (from /projects, cached 3 min + localStorage).
+- Highlight palette (v3.css): blue = next action / in progress, green = Go Live / healthy, amber = attention, red = down, violet = waiting for the client; everything else stays grey.

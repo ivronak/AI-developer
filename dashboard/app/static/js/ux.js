@@ -143,6 +143,56 @@
       if (!document.querySelector("dialog[open]")) { e.preventDefault(); openPalette(); }
     }
   });
+  /* sidebar: your projects (needs attention first, then recent), with status dots */
+  function sidebarProjects() {
+    var nav = document.querySelector(".topbar-in"), acts = document.querySelector(".top-actions"); if (!nav || !acts) return;
+    var box = el("nav", "sb-projects"); box.setAttribute("aria-label", "Projects"); nav.insertBefore(box, acts);
+    var here = (location.pathname.match(/^\/projects\/(\d+)/) || [])[1], cur = null;
+    if (here) { var h1 = document.querySelector(".phead-id h1, .phead h1"); if (h1) { cur = { href: "/projects/" + here, name: h1.firstChild ? h1.firstChild.textContent.trim() : h1.textContent.trim() }; remember(cur); } }
+    function remember(p) {
+      try { var r = JSON.parse(localStorage.getItem("apd.recent") || "[]").filter(function (x) { return x.href !== p.href; }); r.unshift({ href: p.href, name: p.name }); localStorage.setItem("apd.recent", JSON.stringify(r.slice(0, 8))); } catch (e) {}
+    }
+    function paint(list) {
+      box.textContent = "";
+      var recent = []; try { recent = JSON.parse(localStorage.getItem("apd.recent") || "[]"); } catch (e) {}
+      var byHref = {}, i; for (i = 0; i < list.length; i++) byHref[list[i].href] = list[i];
+      var attn = list.filter(function (p) { return p.level === "bad" || p.level === "warn"; }).slice(0, 6);
+      function group(title, items) {
+        if (!items.length) return;
+        box.appendChild(el("span", "nav-label", title));
+        items.forEach(function (p) {
+          var a = el("a", "sb-p" + (location.pathname === p.href ? " is-on" : "")); a.href = p.href; a.title = p.name;
+          var d = el("span", "sb-dot lv-" + (p.level || "ok")); a.appendChild(d); a.appendChild(el("span", "sb-n", p.name)); box.appendChild(a);
+        });
+      }
+      group("Needs attention", attn);
+      var shown = {}; attn.forEach(function (p) { shown[p.href] = 1; });
+      var rec = recent.filter(function (r) { return !shown[r.href]; }).slice(0, 5).map(function (r) { return { href: r.href, name: byHref[r.href] ? byHref[r.href].name : r.name, level: byHref[r.href] ? byHref[r.href].level : "ok" }; });
+      group("Recent", rec);
+    }
+    function load() {
+      var cached = null; try { cached = JSON.parse(sessionStorage.getItem("apd.sbp") || "null"); } catch (e) {}
+      if (cached && Date.now() - cached.t < 180000) { paint(cached.list); return; }
+      if (document.querySelector(".pcard[data-level]")) { var l = []; document.querySelectorAll(".pcard[data-level]").forEach(function (a) { var n = a.querySelector(".pc-id strong"); l.push({ href: a.getAttribute("href"), name: n ? n.textContent.trim() : "", level: a.getAttribute("data-level") }); }); store(l); paint(l); return; }
+      if (!window.fetch || !window.DOMParser) return;
+      fetch("/projects", { credentials: "same-origin" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (t) {
+        if (!t) return; var d = new DOMParser().parseFromString(t, "text/html"), l = [];
+        d.querySelectorAll(".pcard[data-level]").forEach(function (a) { var n = a.querySelector(".pc-id strong"); l.push({ href: a.getAttribute("href"), name: n ? n.textContent.trim() : "", level: a.getAttribute("data-level") }); });
+        store(l); paint(l);
+      }).catch(function () {});
+    }
+    function store(l) { try { sessionStorage.setItem("apd.sbp", JSON.stringify({ t: Date.now(), list: l })); } catch (e) {} }
+    load();
+  }
+
+  /* projects page: the view (cards / list) is remembered */
+  function rememberView() {
+    var tg = document.querySelector(".view-toggle"); if (!tg) return;
+    var want = null; try { want = localStorage.getItem("apd.view"); } catch (e) {}
+    if (want) { var b = tg.querySelector('[data-view="' + want + '"]'); if (b && b.getAttribute("aria-pressed") !== "true") b.click(); }
+    tg.addEventListener("click", function (e) { var b = e.target.closest("[data-view]"); if (b) try { localStorage.setItem("apd.view", b.getAttribute("data-view")); } catch (err) {} });
+  }
+
   /* sidebar: collapse to icons, remembered */
   document.addEventListener("click", function (e) {
     var t = e.target.closest && e.target.closest("[data-side-toggle]"); if (!t) return;
@@ -354,7 +404,7 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
-    spy(); initSettings(); initLog(); copyButtons(document); filterLists(document);
+    spy(); initSettings(); initLog(); sidebarProjects(); rememberView(); copyButtons(document); filterLists(document);
     var cn = document.querySelectorAll(".tabs-sm .n"); for (var c = 0; c < cn.length; c++) if (cn[c].textContent.trim() !== "0") cn[c].classList.add("nz");
     var kz = document.querySelectorAll(".kpi b");
     for (var z = 0; z < kz.length; z++) if (kz[z].textContent.trim() === "0") { var kp = kz[z].closest(".kpi"); if (kp) kp.classList.add("is-zero"); }

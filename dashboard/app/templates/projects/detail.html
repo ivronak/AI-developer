@@ -62,6 +62,7 @@
     <div class="pc-now s-warn wrap">{{ icon('alert') }}<span>{{ repo_problem }}<small>Go Live is blocked so the wrong code can't go live.</small></span></div>
   {% endif %}
 
+  <aside class="p-rail" aria-label="Environments and live status">
   <section class="envs" aria-label="Environments">
     {% if beta %}
     <article class="env">
@@ -115,6 +116,7 @@
     {% endif %}
   </section>
   {% endif %}
+  </aside>
 
   {% if running_job %}
     <div class="agent-run" data-job-poll="{{ url_for('projects.job_status', job_id=running_job.id) }}">

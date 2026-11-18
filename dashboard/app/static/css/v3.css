@@ -175,3 +175,108 @@ details.edit-form.about > summary { color: var(--muted); }
 
 /* ---------- Pages outside the shell ---------- */
 .login-card { border-radius: 12px; }
+
+/* =====================================================================
+   STRUCTURE (v3.1): content first, context in a right rail
+   ===================================================================== */
+/* ---- Projects overview: projects table/cards on the left, context rail on the right ---- */
+@media (min-width: 1280px) {
+  main.page:has(> .panels) { display: grid; grid-template-columns: minmax(0, 1fr) 340px; column-gap: 28px; row-gap: 16px; align-content: start; grid-auto-flow: row dense; }
+  main.page:has(> .panels) > .ov-title { grid-column: 1 / -1; }
+  main.page:has(> .panels) > .toolbar, main.page:has(> .panels) > .kpis, main.page:has(> .panels) > .overview { grid-column: 1; }
+  main.page:has(> .panels) > .ai-strip { grid-column: 2; grid-row: 2; align-self: start; flex-wrap: nowrap; gap: 14px; padding: 8px 14px; min-height: 40px; }
+  main.page:has(> .panels) > .ai-strip .h-ic, main.page:has(> .panels) > .ai-strip .ai-go { display: none; }
+  main.page:has(> .panels) > .ai-strip .ai-k small { font-size: 11px; white-space: nowrap; }
+  main.page:has(> .panels) > .ai-strip .ai-k b { font-size: 14px; }
+  main.page:has(> .panels) > .panels { grid-column: 2; grid-row: 3 / span 3; display: flex; flex-direction: column; gap: 14px; align-self: start; }
+  main.page:has(> .panels) .ov-card.panel { max-height: none; }
+  main.page:has(> .panels) .act-list.panel-scroll { max-height: 340px; }
+  main.page:has(> .panels) .att-list.panel-scroll { max-height: 260px; }
+  main.page:has(> .panels) div.pgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  main.page:has(> .panels) .kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+
+/* ---- Project page: work area on the left, environments + live status in a sticky rail ---- */
+.p-rail { display: grid; gap: 12px; align-content: start; }
+.p-rail:not(:has(*)) { display: none; }
+.p-rail .envs { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+@media (min-width: 1280px) {
+  main.page:has(> .p-rail) { display: grid; grid-template-columns: minmax(0, 1fr) 320px; column-gap: 28px; row-gap: 14px; align-content: start; grid-auto-flow: row dense; }
+  main.page:has(> .p-rail) > * { grid-column: 1; }
+  main.page:has(> .p-rail) > .crumbs-main, main.page:has(> .p-rail) > .phead, main.page:has(> .p-rail) > .setup-card, main.page:has(> .p-rail) > .pc-now, main.page:has(> .p-rail) > .msg { grid-column: 1 / -1; }
+  main.page:has(> .p-rail) > .p-rail { grid-column: 2; grid-row: auto / span 6; position: sticky; top: 16px; align-self: start; }
+  main.page:has(> .p-rail) > dialog { grid-column: auto; }
+}
+
+/* =====================================================================
+   HIGHLIGHTS: a small, fixed palette for what matters. Everything else stays grey.
+   blue = your next action / in progress · green = go live, healthy · amber = attention · red = down, blocked · violet = waiting for the client
+   ===================================================================== */
+:root { --hi: #2563eb; --hi-soft: #eff6ff; --wait: #7c3aed; --wait-soft: #f5f3ff; }
+:root[data-theme="dark"] { --hi: #60a5fa; --hi-soft: #0f2238; --wait: #a78bfa; --wait-soft: #1d1733; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --hi: #60a5fa; --hi-soft: #0f2238; --wait: #a78bfa; --wait-soft: #1d1733; } }
+
+/* summary numbers that need a look get their colour and a top line */
+.kpi[data-filter="bad"]:not(.is-zero) b { color: var(--bad); }
+.kpi[data-filter="warn"]:not(.is-zero) b { color: var(--warn); }
+.kpi[data-filter="approval"]:not(.is-zero) b { color: var(--wait); }
+.kpi[data-filter="open"]:not(.is-zero) b { color: var(--hi); }
+.kpi[data-filter="bad"]:not(.is-zero)::before, .kpi[data-filter="warn"]:not(.is-zero)::before, .kpi[data-filter="approval"]:not(.is-zero)::before, .kpi[data-filter="open"]:not(.is-zero)::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; }
+.kpi[data-filter="bad"]:not(.is-zero)::before { background: var(--bad); }
+.kpi[data-filter="warn"]:not(.is-zero)::before { background: var(--warn); }
+.kpi[data-filter="approval"]:not(.is-zero)::before { background: var(--wait); }
+.kpi[data-filter="open"]:not(.is-zero)::before { background: var(--hi); }
+
+/* project cards / rows: a problem is visible from across the room */
+a.pcard[data-level="bad"] { border-left: 3px solid var(--bad); }
+a.pcard[data-level="warn"] { border-left: 3px solid var(--warn); }
+.prow { box-shadow: none; }
+.prow[data-level="bad"] { box-shadow: inset 3px 0 0 var(--bad); }
+.prow[data-level="warn"] { box-shadow: inset 3px 0 0 var(--warn); }
+.prow:hover { background: var(--surface-2); }
+.cnt { background: var(--hi-soft); color: var(--hi); border-color: transparent; }
+.cnt-wait { background: var(--wait-soft); color: var(--wait); }
+
+/* the main action of a screen */
+.phead-acts .btn-primary, .phead-acts .btn-primary:hover { background: var(--ok); border-color: var(--ok); color: #fff; }
+.phead-acts .btn-primary:hover { filter: brightness(.94); }
+.ccard .btn-primary, .ccard .btn-primary:hover, form.composer .btn-primary, form.composer .btn-primary:hover { background: var(--hi); border-color: var(--hi); color: #fff; }
+.ccard .btn-primary:hover, form.composer .btn-primary:hover { filter: brightness(.94); }
+.stepper li.now::before { background: var(--hi); }
+.stepper li.now { color: var(--hi); }
+.stepper li.done::before { background: var(--ok); }
+
+/* waiting for the client, unread, running */
+.appr { border-left: 3px solid var(--wait); }
+.appr-age { background: var(--wait-soft); color: var(--wait); }
+.appr-age.slow { background: var(--warn-soft); color: var(--warn); }
+.alerts-list li.unseen .dot { background: var(--hi); }
+.agent-run, .b-typing { color: var(--hi); }
+.spin { border-top-color: var(--hi); }
+.act-ic { background: hsl(var(--h) 55% 94%); color: hsl(var(--h) 55% 32%); border-color: hsl(var(--h) 40% 86%); }
+:root[data-theme="dark"] .act-ic { background: hsl(var(--h) 30% 20%); color: hsl(var(--h) 60% 76%); border-color: hsl(var(--h) 25% 28%); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .act-ic { background: hsl(var(--h) 30% 20%); color: hsl(var(--h) 60% 76%); border-color: hsl(var(--h) 25% 28%); } }
+.jump a.is-on, .set-tabs button[aria-selected="true"] { color: var(--hi); }
+.facts dt { color: var(--faint); }
+.hint-link, a { color: var(--link); }
+
+/* ---- sidebar: project list with status dots ---- */
+.sb-projects { display: none; }
+@media (min-width: 900px) {
+  .sb-projects { display: grid; align-content: start; gap: 1px; flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: thin; margin-top: -4px; }
+  .sb-p { display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 12px; border-radius: 7px; color: var(--muted); font-size: 13px; font-weight: 500; text-decoration: none; min-width: 0; }
+  .sb-p:hover { background: color-mix(in srgb, var(--fg) 5%, transparent); color: var(--fg); }
+  .sb-p.is-on { background: color-mix(in srgb, var(--fg) 8%, transparent); color: var(--fg); }
+  .sb-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .sb-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--ok); }
+  .sb-dot.lv-warn { background: var(--warn); } .sb-dot.lv-bad { background: var(--bad); }
+  .side-collapsed .sb-projects { display: none; }
+}
+:root[data-theme="dark"] .phead-acts .btn-primary, :root[data-theme="dark"] .phead-acts .btn-primary:hover { color: #04210f; }
+:root[data-theme="dark"] .ccard .btn-primary, :root[data-theme="dark"] .ccard .btn-primary:hover, :root[data-theme="dark"] form.composer .btn-primary { color: #07162b; }
+:root[data-theme="dark"] .btn-ok { color: #04210f; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .phead-acts .btn-primary, :root:not([data-theme="light"]) .phead-acts .btn-primary:hover { color: #04210f; }
+  :root:not([data-theme="light"]) .ccard .btn-primary, :root:not([data-theme="light"]) .ccard .btn-primary:hover, :root:not([data-theme="light"]) form.composer .btn-primary { color: #07162b; }
+  :root:not([data-theme="light"]) .btn-ok { color: #04210f; }
+}
