@@ -551,3 +551,12 @@ form.set-grid > div:last-child { padding-top: 4px; }
 /* sets inside masonry columns (AI cost) keep their spacing */
 .card-grid > details.set { margin-bottom: 14px; }
 form.set-grid { grid-template-columns: minmax(0, 1fr) !important; }
+
+/* checkbox rows must stay one line (checkbox + text) — also inside .field; project memory file picker as a tidy grid */
+.field > label.check, .set-body .field > label.check, .set-pane .field > label.check, .card .field > label.check, .panel-box .field > label.check { display: flex; align-items: center; gap: 10px; font-weight: 500; }
+#memory-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+#memory-list > label.check { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); cursor: pointer; font-size: 13px; transition: background var(--dur-fast), border-color var(--dur-fast); min-width: 0; }
+#memory-list > label.check:hover { background: var(--surface-2); border-color: var(--line-strong); }
+#memory-list > label.check:has(input:checked) { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+#memory-list > label.check .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+#memory-list > label.check input { margin: 0; flex: none; }

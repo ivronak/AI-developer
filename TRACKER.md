@@ -237,3 +237,5 @@ Everything decided after the PRD that changes what it says. The PRD stays the ba
 - 2026-11-18 · Settings round 4 (UI only): state-first connection panels for GitHub / Claude API / Codemagic / Telegram (status dot with pulse, facts grid, actions on top, edit form + how-to in smooth-opening disclosures, open by default only when not connected), Copy button for the SSH key, motion study from real sites (docs plan §11). All forms/actions unchanged. 524 checks.
 
 - 2026-11-18 · Settings patterns rolled out (UI only): project Settings tab = 7 collapsible rows with status pills (Servers & deploy opens itself when not configured; form ids kept for project.js), Account + AI cost use the same rows, Live environment has a living status dot, Rollback quiet, copy button + filter box on any page, label/footer/danger/meta rules for all card forms. 524 checks.
+
+- 2026-11-18 · Fix (CSS only): checkbox rows inside .field (project memory file picker) were stacked by my label rule — now one line; memory picker is a tidy 3-column grid with ticked files highlighted. 524 checks.
