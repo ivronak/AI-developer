@@ -213,3 +213,5 @@ Everything decided after the PRD that changes what it says. The PRD stays the ba
 - 2026-11-18 · UI/UX redesign RESEARCH + PLAN written (docs/UI-REDESIGN-PLAN.md): Mobbin + web research, phases P0-P7, rule = only UI/design/UX, no logic change. No code changed; waiting for owner answers (section 9).
 
 - 2026-11-18 · UI refresh v1 (UI only): new css/v2.css override layer (delete its <link> in base.html to revert) + base.html: desktop left sidebar, calmer neutral KPI/hero cards, motion tokens, fixes for activity-date wrap + health list spacing. No .py change · 524 checks.
+
+- 2026-11-18 · UI refresh v2 (CSS only, v2.css): list rows no underline + hover, select arrows, compact live-drift panel, "Check now" alignment, Claude-accounts capability lists. Checked on a DB copy with real browser screenshots (desktop/phone/dark/login). 524 checks.
