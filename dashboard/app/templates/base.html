@@ -17,9 +17,11 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/v2.css') }}">
   {% block head %}{% endblock %}
   <script src="{{ url_for('static', filename='js/ui.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/ux.js') }}" defer></script>
   {% block scripts %}{% endblock %}
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
 {% set owner = current_user.is_owner %}
 {% set sections = {"projects": ("All Projects", "main.projects"), "backups": ("Backups", "main.backups"), "users": ("Users & log", "users.index"), "account": ("My account", "auth.account"), "settings": ("Settings", "settings.index")} %}
 {% set sec = sections.get(page, sections["projects"]) %}
@@ -29,6 +31,7 @@
         <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 7h14M5 12h10M5 17h6"/></svg></span>
         <span class="brand-name">{{ APP_NAME }}</span>
       </a>
+      <button class="side-search" type="button" data-cmdk aria-label="Search and jump (Ctrl K)">{{ icon('search') }}<span>Search…</span><kbd>Ctrl K</kbd></button>
       <nav class="crumbs" aria-label="Breadcrumb">
         <a href="{{ url_for(sec[1]) }}">{{ sec[0] }}</a>
         {% if crumb and crumb != sec[0] %}<span class="sep">/</span><strong>{{ crumb }}</strong>{% endif %}

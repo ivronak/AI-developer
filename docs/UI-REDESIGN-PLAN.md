@@ -109,3 +109,8 @@ Order rationale: foundations first so every later page is cheap; P2/P3 are what 
 5. Which phase first? (Recommended: P0 → P1 → P2.) Or start with only the Projects page + Project detail to see the new look fast?
 6. OK to self-host Geist fonts (download from the official repo/Google Fonts) and to add a small motion library only if CSS is not enough?
 7. Credits: owner said the weekly limit is almost finished — do P0–P2 first and the rest in later weeks?
+
+## 10. UX research round (2026-11-18) — what was added
+Sources: Mobbin (Superhuman/Vapi/Replit command palettes, Vercel/PlanetScale/LangChain confirm dialogs, Render/Laravel Cloud/Vercel/Railway deploy progress, Laravel Cloud unsaved-changes bar + toasts, empty states), NN/g response-time limits (0.1 s / 1 s / 10 s), skeleton/loading-state guides, micro-interaction timing conventions (100–200 ms, ease-out, focus-visible parity, reduced-motion).
+Built (UI only, `static/js/ux.js` + `v2.css`): Ctrl/Cmd+K and `/` command palette (pages, tabs, alerts, theme, every project), sidebar search pill, toast close button + time bar, unsaved-changes bar on settings forms, spinner on a sent form's button (on top of the existing double-submit lock), staggered entrance of cards, count-up of KPI numbers, hover/press feedback, cross-page view transition, skip link, friendlier empty states, skeleton class.
+Not done yet (ideas): typed confirmation on Go Live (needs markup in the dialog), live step list for jobs, sticky project tabs, per-row action menus, onboarding checklist polish, keyboard shortcut help.

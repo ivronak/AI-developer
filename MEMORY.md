@@ -448,3 +448,5 @@ Big picture lives in `TRACKER.md` (status, decisions) and `CHANGES.md` (the "zer
 - 2026-11-18 · UI refresh v3 (CSS only): Settings/AI-cost cards pack into 2 columns without empty holes, server rows no longer squeeze text to 1 letter per line, multi-column breakpoints moved for the 240px sidebar.
 
 - 2026-11-18 · UI refresh v4 (CSS only): long lists inside cards scroll (max 520px) so no tall empty column beside them; single user card spans the row. Checked all pages by screenshot (cost, users, claude, settings, project tabs).
+
+- 2026-11-18 · UX layer (UI only): ux.js (Ctrl/Cmd+K palette, toast close, unsaved-changes bar, KPI count-up) + v2.css hover/press/entrance motion, sent-form button spinner, view transition, skip link, empty states. Tested in a real browser on a DB copy. 524 checks.
