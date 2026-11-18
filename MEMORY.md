@@ -444,3 +444,5 @@ Big picture lives in `TRACKER.md` (status, decisions) and `CHANGES.md` (the "zer
 - 2026-11-18 · UI refresh v1 (UI only): new css/v2.css override layer (delete its <link> in base.html to revert) + base.html: desktop left sidebar, calmer neutral KPI/hero cards, motion tokens, fixes for activity-date wrap + health list spacing. No .py change · 524 checks.
 
 - 2026-11-18 · UI refresh v2 (CSS only, v2.css): list rows no underline + hover, select arrows, compact live-drift panel, "Check now" alignment, Claude-accounts capability lists. Checked on a DB copy with real browser screenshots (desktop/phone/dark/login). 524 checks.
+
+- 2026-11-18 · UI refresh v3 (CSS only): Settings/AI-cost cards pack into 2 columns without empty holes, server rows no longer squeeze text to 1 letter per line, multi-column breakpoints moved for the 240px sidebar.
