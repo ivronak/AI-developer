@@ -217,3 +217,5 @@ Everything decided after the PRD that changes what it says. The PRD stays the ba
 - 2026-11-18 · UI refresh v2 (CSS only, v2.css): list rows no underline + hover, select arrows, compact live-drift panel, "Check now" alignment, Claude-accounts capability lists. Checked on a DB copy with real browser screenshots (desktop/phone/dark/login). 524 checks.
 
 - 2026-11-18 · UI refresh v3 (CSS only): Settings/AI-cost cards pack into 2 columns without empty holes, server rows no longer squeeze text to 1 letter per line, multi-column breakpoints moved for the 240px sidebar.
+
+- 2026-11-18 · UI refresh v4 (CSS only): long lists inside cards scroll (max 520px) so no tall empty column beside them; single user card spans the row. Checked all pages by screenshot (cost, users, claude, settings, project tabs).

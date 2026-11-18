@@ -131,3 +131,15 @@ section.live-drift .row-actions { display: flex; gap: 8px; flex-wrap: wrap; marg
 .row-lead { min-width: 0; }
 .row-lead .row-main { min-width: 0; flex: 1 1 auto; }
 .row-sub { overflow-wrap: anywhere; word-break: normal; }
+
+/* ---------- Long lists scroll inside their card instead of stretching the page (no big empty column beside them) ---------- */
+.card-grid .card > .rows, .card-grid .card > .rows-scroll { max-height: 520px; overflow-y: auto; scrollbar-width: thin; }
+#servers .rows { max-height: none; overflow: visible; }
+
+/* ---------- Users: few people → the card uses the whole row instead of leaving half of it empty ---------- */
+div.users { grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); }
+.ucard { container-type: inline-size; }
+@media (min-width: 900px) {
+  div.users > .ucard:only-child .ucard-body { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; column-gap: 32px; }
+  div.users > .ucard:only-child .ucard-body > .chip-row, div.users > .ucard:only-child .ucard-body > .ucard-acts { grid-column: 1 / -1; }
+}
