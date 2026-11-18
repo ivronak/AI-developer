@@ -203,7 +203,24 @@
     n.textContent = "0"; requestAnimationFrame(step);
   }
 
+  /* in-page jump bar: the link of the section on screen is highlighted */
+  function spy() {
+    var links = document.querySelectorAll(".jump a"); if (!links.length || !window.IntersectionObserver) return;
+    var map = {}, i;
+    for (i = 0; i < links.length; i++) { var id = (links[i].getAttribute("href") || "").slice(1); var t = id && document.getElementById(id); if (t) map[id] = { a: links[i], t: t }; }
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        for (var k in map) map[k].a.classList.toggle("is-on", map[k].t === e.target);
+      });
+    }, { rootMargin: "-20% 0px -65% 0px" });
+    for (var k in map) io.observe(map[k].t);
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
+    spy();
+    var kz = document.querySelectorAll(".kpi b");
+    for (var z = 0; z < kz.length; z++) if (kz[z].textContent.trim() === "0") { var kp = kz[z].closest(".kpi"); if (kp) kp.classList.add("is-zero"); }
     var ts = document.querySelectorAll("#toasts .toast"), i;
     for (i = 0; i < ts.length; i++) decorateToast(ts[i]);
     var box = document.getElementById("toasts");

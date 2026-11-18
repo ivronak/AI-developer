@@ -225,3 +225,5 @@ Everything decided after the PRD that changes what it says. The PRD stays the ba
 - 2026-11-18 · Project cards redesigned (UI only; Mobbin research: Vercel/Clerk/Lovable/Airtable/Emergent): name + address first, one deploy line, small status, counts + client in a footer, top accent bar by status; compact KPI tiles on phones. All data/data-* hooks kept. 524 checks.
 
 - 2026-11-18 · UI round 2 (UI only): lighter chat bubbles (owner = soft accent, Claude = neutral), Projects page title + summary line, sticky project tabs, centred empty panels, list-view tidy-up, composer focus glow. 524 checks.
+
+- 2026-11-18 · UI round 3 (UI only; Mobbin: Hashnode/Klaviyo/Featurebase settings nav, Toggl/Aboard approve patterns, Perplexity/Asana mobile): Settings sticky jump bar with scroll-spy, calmer KPI tiles + dimmed zeros, project header actions (rollback quiet, 2x2 labelled grid on phones), client approve page: accent first action, sticky decision bar, checklist cards. 524 checks.

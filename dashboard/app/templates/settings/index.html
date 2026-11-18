@@ -25,8 +25,11 @@
       {% else %}Root commands are ready: Claude can ask to run a command as root — only after you read it and type a fresh authenticator code.{% endif %}
       <small>Every root command is logged on the server in <span class="mono">/var/log/aidash-rootd.log</span>. To switch it off: <span class="mono">systemctl disable --now aidash-rootd</span>.</small></span></div>
   {% endif %}
+  <nav class="jump" aria-label="Jump to a section">
+    <a href="#github">{{ icon('github') }}GitHub</a><a href="#claude">Claude API</a><a href="#claude-code">Claude Code</a><a href="#codemagic">Codemagic</a><a href="#telegram">Telegram</a><a href="#servers">Servers</a><a href="#monitor">Site monitor</a>
+  </nav>
   <div class="card-grid">
-    <section class="card" aria-labelledby="h-gh">
+    <section class="card" id="github" aria-labelledby="h-gh">
       <h2 id="h-gh"><span class="h-ic" style="--h:245">{{ icon('github') }}</span>GitHub</h2>
       <p class="hint"><strong>Only repos owned by this account / organization appear.</strong> A repo that belongs to another person's GitHub account (you're only a collaborator there) can't be read with this token — ask its owner to <em>Transfer ownership</em> to this account (they stay a collaborator), or move all repos into a GitHub organization. A renamed or transferred repo stays the same project here.</p>
       <p class="hint">Every repo of this account / organization is a project here. A new repo shows up as a project automatically (every 5 minutes on the server, or with “Sync now”).</p>
