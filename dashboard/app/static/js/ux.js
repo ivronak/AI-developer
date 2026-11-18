@@ -143,9 +143,59 @@
       if (!document.querySelector("dialog[open]")) { e.preventDefault(); openPalette(); }
     }
   });
+  /* ---------- chat dock: the project chat sits beside the work (right / left), resizable, can be hidden ---------- */
+  function chatDock() {
+    var panel = document.querySelector(".chat-panel"); if (!panel || !window.matchMedia) return;
+    var root = document.documentElement, mq = window.matchMedia("(min-width: 1100px)");
+    function get(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+    function put(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+    var mode = get("apd.dock", "right"), w = parseInt(get("apd.dockw", "420"), 10) || 420;
+    var ICON = {
+      side: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>',
+      wide: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>',
+      hide: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>'
+    };
+    var h1 = document.querySelector(".phead-id h1");
+    var bar = el("div", "dock-bar"), title = el("strong", "", "Chat"); bar.appendChild(title);
+    var sub = el("span", "", h1 && h1.firstChild ? h1.firstChild.textContent.trim() : ""); sub.style.cssText = "font-size:12.5px;color:var(--muted);margin-right:auto;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+    title.style.marginRight = "6px"; bar.appendChild(sub);
+    function btn(act, label) { var b = el("button"); b.type = "button"; b.setAttribute("data-dock-act", act); b.setAttribute("aria-label", label); b.title = label; b.innerHTML = ICON[act]; bar.appendChild(b); return b; }
+    btn("side", "Dock to the other side"); btn("wide", "Wider / narrower"); btn("hide", "Hide the dock (back to the Chat tab)");
+    panel.insertBefore(bar, panel.firstChild);
+    var handle = el("div", "dock-resize"); handle.setAttribute("aria-hidden", "true"); panel.appendChild(handle);
+    var fab = el("button", "dock-fab", "Dock the chat"); fab.type = "button"; fab.hidden = true; document.body.appendChild(fab);
+    function apply() {
+      var on = mq.matches && mode !== "off";
+      root.classList.toggle("chat-docked", on); root.classList.toggle("dock-left", on && mode === "left");
+      root.style.setProperty("--dock-w", w + "px"); fab.hidden = !(mq.matches && mode === "off");
+      if (on) { var cur = document.querySelector('[data-tab][aria-selected="true"]'); if (cur && cur.getAttribute("data-tab") === "chat") { var t = document.querySelector('[data-tab="changes"]'); if (t) t.click(); } }
+    }
+    bar.addEventListener("click", function (e) {
+      var b = e.target.closest("[data-dock-act]"); if (!b) return; var act = b.getAttribute("data-dock-act");
+      if (act === "side") { mode = mode === "left" ? "right" : "left"; put("apd.dock", mode); }
+      else if (act === "wide") { w = w < 520 ? 600 : 420; put("apd.dockw", String(w)); }
+      else if (act === "hide") { mode = "off"; put("apd.dock", mode); var c = document.querySelector('[data-tab="chat"]'); }
+      apply();
+      if (mode === "off") { var c2 = document.querySelector('[data-tab="chat"]'); if (c2) c2.click(); }
+    });
+    fab.addEventListener("click", function () { mode = "right"; put("apd.dock", mode); apply(); });
+    handle.addEventListener("pointerdown", function (e) {
+      e.preventDefault(); root.classList.add("dock-dragging"); handle.setPointerCapture(e.pointerId);
+      function move(ev) {
+        var left = root.classList.contains("dock-left");
+        var nw = left ? ev.clientX - (parseInt(getComputedStyle(root).getPropertyValue("--side-w"), 10) || 240) - 8 : window.innerWidth - ev.clientX - 8;
+        w = Math.max(320, Math.min(760, Math.round(nw))); root.style.setProperty("--dock-w", w + "px");
+      }
+      function up() { root.classList.remove("dock-dragging"); handle.removeEventListener("pointermove", move); handle.removeEventListener("pointerup", up); put("apd.dockw", String(w)); }
+      handle.addEventListener("pointermove", move); handle.addEventListener("pointerup", up);
+    });
+    if (mq.addEventListener) mq.addEventListener("change", apply); else if (mq.addListener) mq.addListener(apply);
+    apply(); window.addEventListener("load", apply);
+  }
+
   /* rails stay in view while the page scrolls (a tall rail sticks by its bottom edge, a short one by its top) */
   function stickyRails() {
-    var rails = document.querySelectorAll(".p-rail, main.page > .panels"); if (!rails.length) return;
+    var rails = document.querySelectorAll(".p-rail, .ov-side"); if (!rails.length) return;
     function fit() { for (var i = 0; i < rails.length; i++) { var h = rails[i].offsetHeight; rails[i].style.top = Math.min(16, window.innerHeight - h - 16) + "px"; } }
     fit(); window.addEventListener("resize", fit);
     if (window.ResizeObserver) for (var k = 0; k < rails.length; k++) new ResizeObserver(fit).observe(rails[k]);
@@ -153,9 +203,9 @@
   /* project page: a change in the rail opens in the chat */
   document.addEventListener("click", function (e) {
     var b = e.target.closest && e.target.closest("[data-goto-change]"); if (!b) return;
-    var tab = document.querySelector('[data-tab="chat"]'); if (tab) tab.click();
+    var tab = document.querySelector('[data-tab="chat"]'); if (tab && !document.documentElement.classList.contains("chat-docked")) tab.click();
     var pk = document.querySelector('.pick [data-pick="' + b.getAttribute("data-goto-change") + '"]'); if (pk) pk.click();
-    var tb = document.getElementById("tabs"); if (tb) tb.scrollIntoView({ block: "start" });
+    var tb = document.getElementById("tabs"); if (tb && !document.documentElement.classList.contains("chat-docked")) tb.scrollIntoView({ block: "start" });
   });
 
   /* sidebar: your projects (needs attention first, then recent), with status dots */
@@ -420,7 +470,7 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
-    spy(); initSettings(); initLog(); sidebarProjects(); rememberView(); stickyRails(); copyButtons(document); filterLists(document);
+    spy(); initSettings(); initLog(); sidebarProjects(); rememberView(); chatDock(); stickyRails(); copyButtons(document); filterLists(document);
     var cn = document.querySelectorAll(".tabs-sm .n"); for (var c = 0; c < cn.length; c++) if (cn[c].textContent.trim() !== "0") cn[c].classList.add("nz");
     var kz = document.querySelectorAll(".kpi b");
     for (var z = 0; z < kz.length; z++) if (kz[z].textContent.trim() === "0") { var kp = kz[z].closest(".kpi"); if (kp) kp.classList.add("is-zero"); }

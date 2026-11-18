@@ -371,3 +371,95 @@ main.page:has(.needs) .ov-card.panel .hring-wrap { padding-bottom: 0; }
 .prow .nm span { flex: 1 1 0; }
 .prow .col:nth-child(4) > span:first-child { white-space: nowrap; }
 @media (min-width: 1000px) { .prow, .plist-head { grid-template-columns: minmax(210px, 1.3fr) minmax(0, 1.3fr) 92px 190px; } }
+
+/* =====================================================================
+   LAYOUT v3.3 — wrappers instead of grid spans (a filter can no longer stretch rows), "Needs you" dropdown, chat dock
+   ===================================================================== */
+/* ---- home ---- */
+.ov-body, .ov-col, .ov-side { display: contents; }
+.ov-col > .toolbar { order: 1; } .ov-col > .needs { order: 2; } .ov-side > .ai-strip { order: 3; } .ov-col > .kpis { order: 4; } .ov-side > .panels { order: 5; } .ov-col > .overview { order: 6; }
+@media (min-width: 1280px) {
+  .ov-body { display: grid; grid-template-columns: minmax(0, 1fr) 340px; column-gap: 28px; align-items: start; }
+  .ov-col { display: grid; gap: 16px; min-width: 0; align-content: start; }
+  .ov-side { display: grid; gap: 14px; align-content: start; position: sticky; top: 16px; }
+  .ov-col > *, .ov-side > * { order: 0; }
+  .ov-side > .panels { display: flex; flex-direction: column; gap: 14px; }
+  .ov-side .ov-card.panel { max-height: none; }
+  .ov-side .act-list.panel-scroll { max-height: 440px; }
+  .ov-side .panels > section:has(.appr-list[data-appr-list="waiting"] .appr) { order: -1; }
+  .ov-side > .ai-strip { flex-wrap: nowrap; gap: 14px; padding: 8px 14px; min-height: 40px; }
+  .ov-side > .ai-strip .h-ic, .ov-side > .ai-strip .ai-go { display: none; }
+  .ov-side > .ai-strip .ai-k small { font-size: 11px; white-space: nowrap; }
+  .ov-side > .ai-strip .ai-k b { font-size: 14px; }
+  .ov-col div.pgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ov-col .kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+
+/* ---- "Needs you now" dropdown ---- */
+details.needs { padding: 0; }
+details.needs::details-content { block-size: 0; overflow: hidden; transition: block-size .3s var(--ease-drawer), content-visibility .3s allow-discrete; }
+details.needs[open]::details-content { block-size: auto; }
+.needs-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; list-style: none; user-select: none; transition: background var(--dur-fast); }
+.needs-head::-webkit-details-marker { display: none; }
+.needs-head:hover { background: var(--surface-2); }
+.needs-head:focus-visible { outline: none; box-shadow: inset var(--focus); }
+.needs-title { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.needs-peek { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.needs-head::after { content: ""; flex: none; width: 18px; height: 18px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23858585' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") center / 18px no-repeat; transition: transform var(--dur-base) var(--ease-drawer); }
+details.needs[open] > .needs-head::after { transform: rotate(180deg); }
+details.needs[open] > .needs-head { border-bottom: 1px solid var(--line); }
+.needs-head h2 { font-size: 15px; }
+
+/* ---- project page ---- */
+.p-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.p-main { display: grid; gap: 14px; min-width: 0; align-content: start; }
+.p-body > .p-rail { order: -1; }
+@media (min-width: 1280px) {
+  .p-body { grid-template-columns: minmax(0, 1fr) 320px; column-gap: 28px; align-items: start; }
+  .p-body > .p-rail { order: 0; position: sticky; top: 16px; }
+}
+
+/* ---- chat dock: the AI chat lives beside the work, like VS Code / Cursor (≥ 1100 px) ---- */
+:root { --dock-w: 420px; }
+.dock-bar, .dock-resize, .dock-fab { display: none; }
+@media (min-width: 1100px) {
+  html.chat-docked .chat-panel { position: fixed !important; top: 8px; right: 8px; bottom: 8px; width: var(--dock-w); height: auto !important; max-height: none; z-index: 30; display: flex !important; flex-direction: column; gap: 0; padding: 0; overflow: hidden; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-pop); }
+  html.chat-docked.dock-left .chat-panel { right: auto; left: calc(var(--side-w) + 8px); }
+  html.chat-docked main.page { margin-right: calc(var(--dock-w) + 16px); }
+  html.chat-docked.dock-left main.page { margin-left: calc(var(--dock-w) + 8px); margin-right: 8px; }
+  html.chat-docked [data-tab="chat"] { display: none; }
+  html.chat-docked .p-body { grid-template-columns: minmax(0, 1fr); }
+  html.chat-docked .p-body > .p-rail { position: static; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; order: -1; }
+  html.chat-docked .p-rail .envs { grid-template-columns: 1fr; display: contents; }
+  html.chat-docked .p-rail .envs > * { min-width: 0; }
+  html.chat-docked .dock-bar { display: flex; align-items: center; gap: 4px; flex: none; height: 44px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
+  .dock-bar strong { font-size: 13.5px; font-weight: 600; margin-right: auto; display: flex; align-items: center; gap: 8px; }
+  .dock-bar strong::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--hi); }
+  .dock-bar button { width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; transition: background var(--dur-fast), color var(--dur-fast); }
+  .dock-bar button:hover { background: color-mix(in srgb, var(--fg) 8%, transparent); color: var(--fg); }
+  .dock-bar svg { width: 16px; height: 16px; }
+  html.chat-docked .chat-panel > .pick { padding: 10px 12px 0; flex: none; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
+  html.chat-docked .chat-panel > .pick > * { flex: none; }
+  html.chat-docked .chat-scroll { padding: 10px 12px 0; }
+  html.chat-docked .thread-box { min-height: 120px; }
+  html.chat-docked .chat-panel form.composer { margin: 10px 12px 12px; flex: none; }
+  html.chat-docked .chat-panel .intro, html.chat-docked .chat-panel p.muted { font-size: 13px; }
+  html.chat-docked .dock-resize { display: block; position: absolute; top: 0; bottom: 0; right: auto; left: -4px; width: 8px; cursor: col-resize; z-index: 5; }
+  html.chat-docked.dock-left .dock-resize { left: auto; right: -4px; }
+  .dock-resize::after { content: ""; position: absolute; top: 50%; left: 3px; width: 2px; height: 40px; margin-top: -20px; border-radius: 2px; background: var(--line-strong); opacity: 0; transition: opacity var(--dur-fast); }
+  .dock-resize:hover::after, html.dock-dragging .dock-resize::after { opacity: 1; background: var(--hi); }
+  html.dock-dragging, html.dock-dragging * { user-select: none !important; cursor: col-resize !important; }
+  .dock-fab { position: fixed; right: 20px; bottom: 20px; z-index: 40; height: 40px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--fg); color: var(--bg); font-size: 13.5px; font-weight: 600; box-shadow: var(--shadow-pop); cursor: pointer; display: none; align-items: center; gap: 8px; }
+  .dock-fab:not([hidden]) { display: inline-flex; }
+}
+@media (min-width: 1100px) {
+  html.chat-docked .p-body > .p-rail { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+  html.chat-docked .rail-card { display: none; }
+  html.chat-docked .live-drift { grid-column: 1 / -1; }
+  html.chat-docked .phead { grid-template-columns: auto minmax(0, 1fr); }
+  html.chat-docked .phead-acts { grid-column: 1 / -1; justify-content: flex-start; }
+  html.chat-docked .phead-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  html.chat-docked .phead-id h1 { flex-wrap: wrap; }
+  html.chat-docked .chat-scroll > [data-change] > .ccard { max-height: 250px; overflow-y: auto; }
+  html.chat-docked .ccard-head h2 { font-size: 15px; }
+}

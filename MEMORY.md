@@ -480,3 +480,5 @@ Big picture lives in `TRACKER.md` (status, decisions) and `CHANGES.md` (the "zer
 - 2026-11-18 · Layout v3.2 (UI only): home = "Needs you now" queue first + compact one-line project list as default (view toggle kept), project header summary strip (live status / last deploy / commit / response / open / waiting), rail reorder. 524 checks.
 
 - 2026-11-18 · Rails always useful (UI only): both rails are sticky (a tall rail sticks by its bottom edge via JS, a short one by its top), project rail gained "Open changes" (click opens the change in the chat) and "Recent runs" cards, home activity list taller, list rows no longer wrap. 524 checks.
+
+- 2026-11-18 · Layout v3.3 (UI only): Needs-you-now is a dropdown; home/project use wrapper columns (fixes KPI strip stretching when filtering the list view); AI chat can dock right/left like VS Code (resizable, wide, hide -> classic tab, remembered). 524 checks.

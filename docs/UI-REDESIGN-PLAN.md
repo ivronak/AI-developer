@@ -138,3 +138,8 @@ Built (UI only, CSS grid + one `<aside>` wrapper + small JS):
 
 ## 14. Layout v3.2 (2026-11-18)
 Research (Mobbin): Neon / Supabase / Braintrust project dashboards (title + URL, then a row of key metrics), Linear / Zoho / Airtable (one-line dense rows, grouped by status), Airtable / ClickUp (action queues). Built: home starts with "Needs you now" (down / attention projects + client approvals waiting, each with an Open/Review button; "All clear" when empty), duplicated attention list hidden in the Health panel, approvals panel moves first in the rail when something is pending, projects default to the compact one-line list (cards remain a toggle), project header carries a summary strip (live status, last deploy, live commit, response, open changes, waiting approval).
+
+## 15. Layout v3.3 (2026-11-18): chat dock, dropdown queue, wrappers
+- "Needs you now" is a dropdown (`<details>`): closed = title + count + names, open = the list with Open / Review buttons.
+- Grid spans replaced by wrappers (`.ov-body > .ov-col + .ov-side`, `.p-body > .p-main + .p-rail`): a filter can no longer stretch the KPI strip (CSS grid distributes a spanning item's extra height over the rows it spans).
+- Chat dock (project page, ≥ 1100 px; research: VS Code secondary side bar / Copilot Chat, Cursor, Replit, Base44 — chat beside the work, resizable, dockable, hideable): the existing chat panel is fixed to the right (or left) edge, always visible while you switch tabs; drag the edge to resize (320–760 px, remembered), buttons for side / wide / hide; hiding returns the classic Chat tab and shows a "Dock the chat" button. State: localStorage apd.dock / apd.dockw. No chat logic touched — only CSS positioning + `ux.js::chatDock()`.

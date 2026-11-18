@@ -6,6 +6,8 @@
   {% set n_bad = rows|selectattr('level', 'equalto', 'bad')|list|length %}{% set n_warn = rows|selectattr('level', 'equalto', 'warn')|list|length %}
   <div class="page-head ov-title"><h1>Projects</h1>
     <p>{{ rows|length }} project{{ "s" if rows|length != 1 }}{% if n_bad %} · <span class="t-bad">{{ n_bad }} down</span>{% endif %}{% if n_warn %} · <span class="t-warn">{{ n_warn }} need attention</span>{% endif %}{% if not n_bad and not n_warn %} · all healthy{% endif %}</p></div>
+  <div class="ov-body">
+  <div class="ov-col">
   <div class="toolbar">
     <div class="search">
       {{ icon('search') }}
@@ -19,27 +21,97 @@
   </div>
 
   {% set needs_rows = rows|selectattr('level', 'ne', 'ok')|list %}{% set needs_total = needs_rows|length + pending|length %}
-  <section class="needs{% if not needs_total %} is-clear{% endif %}" aria-labelledby="h-needs">
-    {% if needs_total %}
-      <div class="needs-head"><h2 id="h-needs">Needs you now</h2><span class="needs-n">{{ needs_total }}</span></div>
-      <ul class="needs-list">
-        {% for r in needs_rows[:4] %}
-          <li class="nd-{{ r.level }}"><span class="nd-ic">{{ icon('alert') }}</span>
-            <span class="nd-t"><strong>{{ r.p.name }}</strong><span>{{ r.reason }}</span></span>
-            <a class="btn btn-sm" href="{{ url_for('projects.detail', project_id=r.p.id) }}">Open</a></li>
-        {% endfor %}
-        {% for c in pending[:3] %}{% set a = c.approval %}
-          <li class="nd-wait"><span class="nd-ic">{{ icon('send') }}</span>
-            <span class="nd-t"><strong>{{ c.project.name }}</strong><span>Waiting for the client: {{ c.title }}{% if a %} · sent {{ a.sent_at|ago }}{% endif %}</span></span>
-            <a class="btn btn-sm" href="{{ url_for('projects.detail', project_id=c.project_id) }}">Review</a></li>
-        {% endfor %}
-      </ul>
-      {% if needs_total > 7 or needs_rows|length > 4 or pending|length > 3 %}<p class="needs-more">Showing the most urgent. Use the filters below for the rest.</p>{% endif %}
-    {% else %}
-      <span class="nd-ic ok">{{ icon('check') }}</span><span><strong>All clear.</strong> Nothing needs you right now.</span>
-    {% endif %}
-  </section>
+  {% if needs_total %}
+  <details class="needs" id="needs">
+    <summary class="needs-head"><span class="needs-title">Needs you now</span><span class="needs-n">{{ needs_total }}</span>
+      <span class="needs-peek">{% set peek = (needs_rows|map(attribute='p.name')|list) + (pending|map(attribute='project.name')|list) %}{{ peek[:2]|join(", ") }}{% if needs_total > 2 %} +{{ needs_total - 2 }} more{% endif %}</span></summary>
+    <ul class="needs-list">
+      {% for r in needs_rows[:4] %}
+        <li class="nd-{{ r.level }}"><span class="nd-ic">{{ icon('alert') }}</span>
+          <span class="nd-t"><strong>{{ r.p.name }}</strong><span>{{ r.reason }}</span></span>
+          <a class="btn btn-sm" href="{{ url_for('projects.detail', project_id=r.p.id) }}">Open</a></li>
+      {% endfor %}
+      {% for c in pending[:3] %}{% set a = c.approval %}
+        <li class="nd-wait"><span class="nd-ic">{{ icon('send') }}</span>
+          <span class="nd-t"><strong>{{ c.project.name }}</strong><span>Waiting for the client: {{ c.title }}{% if a %} · sent {{ a.sent_at|ago }}{% endif %}</span></span>
+          <a class="btn btn-sm" href="{{ url_for('projects.detail', project_id=c.project_id) }}">Review</a></li>
+      {% endfor %}
+    </ul>
+    {% if needs_rows|length > 4 or pending|length > 3 %}<p class="needs-more">Showing the most urgent. Use the filters below for the rest.</p>{% endif %}
+  </details>
+  {% else %}
+  <section class="needs is-clear" aria-label="Needs you now"><span class="nd-ic ok">{{ icon('check') }}</span><span><strong>All clear.</strong> Nothing needs you right now.</span></section>
+  {% endif %}
+  <div class="kpis" id="kpis" role="group" aria-label="Summary — tap to filter">
+    {% for key, h, ic, val, label in [("all", 240, "grid", rows|length, "Projects"), ("bad", 0, "bell", counts.bad, "Down now"),
+        ("warn", 35, "activity", counts.warn, "Need attention"), ("approval", 215, "send", total_waiting, "Waiting approval"),
+        ("open", 265, "list", total_open, "Open changes")] %}
+      <button class="kpi" type="button" style="--h:{{ h }}" data-filter="{{ key }}" aria-pressed="{{ 'true' if key == 'all' else 'false' }}">
+        <span class="kpi-ic">{{ icon(ic) }}</span><b>{{ val }}</b><span class="l">{{ label }}</span></button>
+    {% endfor %}
+  </div>
 
+  <div class="overview">
+    <section class="ov-main" aria-labelledby="h-projects">
+      <div class="ov-main-head">
+        <h2 id="h-projects">Projects</h2>
+        <div class="tabs-sm" role="group" aria-label="Filter projects" id="chips">
+          {% for key, label, n in [("all", "All", rows|length), ("bad", "Down", counts.bad), ("warn", "Attention", counts.warn),
+              ("approval", "Approval pending", rows|selectattr("waiting")|list|length), ("open", "Open changes", rows|selectattr("open")|list|length),
+              ("active", "Active", rows|selectattr("p.is_active")|list|length)] %}
+            <button type="button" data-filter="{{ key }}" aria-pressed="{{ 'true' if key == 'all' else 'false' }}">{{ label }} <span class="n">{{ n }}</span></button>
+          {% endfor %}
+        </div>
+      </div>
+      {% if not current_user.is_owner %}<p class="scope-note">You see only the {{ rows|length }} projects assigned to you.</p>{% endif %}
+
+      <div class="pgrid" id="grid">
+        {% for r in rows %}{% set p = r.p %}
+          <a class="pcard" href="{{ url_for('projects.detail', project_id=p.id) }}" style="--h:{{ hue(p) }}"
+             data-item data-name="{{ (p.name ~ ' ' ~ p.client_name)|lower }}" data-level="{{ r.level }}" data-waiting="{{ r.waiting }}" data-open="{{ r.open }}" data-active="{{ 1 if p.is_active else 0 }}">
+            <div class="pc-top"><span class="pav{% if not p.is_active %} off{% endif %}">{{ initials(p.name) }}</span>
+              <span class="pc-id"><strong>{{ p.name }}</strong><span>{{ r.live.url.replace("https://", "") if r.live and r.live.url else "No live address yet" }}</span></span>
+              <span class="hpill s-{{ r.level }}">{{ r.label }}</span></div>
+            <div class="pc-body">
+              {% if r.level != "ok" %}
+                <div class="pc-now s-{{ r.level }}">{{ icon('alert') }}<span>{{ r.reason }}<small>{{ "Open the project to roll back or debug" if r.level == "bad" else "Needs a look" }}</small></span></div>
+              {% else %}
+                <div class="pc-deploy">{{ icon('rocket') }}<span>{{ r.last_deploy.note if r.last_deploy else "No live release yet" }}</span></div>
+              {% endif %}
+              <div class="pc-meta"><span>{{ icon('branch') }}<span class="mono">{{ r.live.current_commit if r.live and r.live.current_commit else "—" }}</span></span>
+                <span>{{ icon('upload') }}{% if r.last_deploy %}Deployed {{ ago_of(r.last_deploy.created_at) }}{% else %}Never deployed{% endif %}</span></div>
+              <div class="chip-row"><span class="repo">{{ icon('github') }}<span>{{ p.github_repo or "No repo yet" }}</span></span>
+                {% for t in p.tech_stack %}<span class="tech" style="--h:{{ tech_hue(t) }}">{{ t }}</span>{% endfor %}
+                {% if not p.is_active %}<span class="tag-off">Dormant</span>{% endif %}
+                {% if p.needs_setup %}<span class="pill pill-warn">Needs setup</span>{% endif %}{% if p.repo_missing %}<span class="pill pill-bad">Repo missing</span>{% endif %}</div>
+            </div>
+            <div class="pc-foot"><span class="pc-client">{{ p.client_name }} · {{ "VPS" if p.host_type == "vps" else "cPanel" }}</span>
+              <span class="pc-counts">{% if r.open or r.waiting %}{% if r.open %}<span class="cnt">{{ icon('list') }}{{ r.open }} open</span>{% endif %}{% if r.waiting %}<span class="cnt cnt-wait">{{ icon('send') }}{{ r.waiting }} waiting</span>{% endif %}{% else %}<span class="cnt-none">No open changes</span>{% endif %}</span>
+              <span class="open">Open →</span></div>
+          </a>
+        {% endfor %}
+      </div>
+
+      <div class="plist" id="list" hidden>
+        <div class="plist-head"><span>Project</span><span>Status</span><span>Live version</span><span>Last deploy</span></div>
+        {% for r in rows %}{% set p = r.p %}
+          <a class="prow" href="{{ url_for('projects.detail', project_id=p.id) }}" style="--h:{{ hue(p) }}"
+             data-item data-name="{{ (p.name ~ ' ' ~ p.client_name)|lower }}" data-level="{{ r.level }}" data-waiting="{{ r.waiting }}" data-open="{{ r.open }}" data-active="{{ 1 if p.is_active else 0 }}">
+            <span class="who"><span class="pav{% if not p.is_active %} off{% endif %}">{{ initials(p.name) }}</span><span class="nm"><strong>{{ p.name }}</strong><span>{{ p.client_name }}{% if p.tech_stack %} · {{ p.tech_stack|join(" + ") }}{% endif %}</span></span></span>
+            <span class="col"><span class="st s-{{ r.level }}"><span class="ldot s-{{ r.level }}"></span>{{ r.label }}</span>{% if r.reason %}<span class="sub">{{ r.reason }}</span>{% endif %}</span>
+            <span class="col col-hide"><span class="commit">{{ icon('branch') }}<span class="mono">{{ r.live.current_commit if r.live else "—" }}</span></span><span class="sub">{{ r.last_deploy.note if r.last_deploy else "" }}</span></span>
+            {# HIDDEN until backups are worked on <span class="col col-hide"><span class="sub{% if r.backup_stale %} stale{% endif %}">{{ r.last_backup.created_at|ago if r.last_backup else "missing" }}</span></span> #}
+            <span class="col col-hide"><span>{{ ago_of(r.last_deploy.created_at if r.last_deploy else None) }}</span><span class="sub">{{ r.open }} open · {{ r.waiting }} waiting</span></span>
+          </a>
+        {% endfor %}
+      </div>
+      <div class="empty" id="empty" {% if rows %}hidden{% endif %}>No projects match. Clear the search or pick another filter.</div>
+    </section>
+  </div>
+
+  {% if current_user.is_owner %}
+  </div>
+  <aside class="ov-side" aria-label="Summary">
   {% if ai %}{% set is_low = ai.left is not none and ai.low and ai.left < ai.low %}
   <a class="ai-strip{% if is_low or ai.near %} is-warn{% endif %}" href="{{ url_for('ai_cost.index') }}" aria-label="AI cost and Anthropic balance — open the AI cost page">
     <span class="h-ic" style="--h:150">{{ icon('coin') }}</span>
@@ -51,15 +123,6 @@
     <span class="ai-go">Details →</span>
   </a>
   {% endif %}
-
-  <div class="kpis" id="kpis" role="group" aria-label="Summary — tap to filter">
-    {% for key, h, ic, val, label in [("all", 240, "grid", rows|length, "Projects"), ("bad", 0, "bell", counts.bad, "Down now"),
-        ("warn", 35, "activity", counts.warn, "Need attention"), ("approval", 215, "send", total_waiting, "Waiting approval"),
-        ("open", 265, "list", total_open, "Open changes")] %}
-      <button class="kpi" type="button" style="--h:{{ h }}" data-filter="{{ key }}" aria-pressed="{{ 'true' if key == 'all' else 'false' }}">
-        <span class="kpi-ic">{{ icon(ic) }}</span><b>{{ val }}</b><span class="l">{{ label }}</span></button>
-    {% endfor %}
-  </div>
 
   <div class="panels">
     <section class="ov-card panel" aria-labelledby="h-health">
@@ -142,65 +205,8 @@
     </section>
   </div>
 
-  <div class="overview">
-    <section class="ov-main" aria-labelledby="h-projects">
-      <div class="ov-main-head">
-        <h2 id="h-projects">Projects</h2>
-        <div class="tabs-sm" role="group" aria-label="Filter projects" id="chips">
-          {% for key, label, n in [("all", "All", rows|length), ("bad", "Down", counts.bad), ("warn", "Attention", counts.warn),
-              ("approval", "Approval pending", rows|selectattr("waiting")|list|length), ("open", "Open changes", rows|selectattr("open")|list|length),
-              ("active", "Active", rows|selectattr("p.is_active")|list|length)] %}
-            <button type="button" data-filter="{{ key }}" aria-pressed="{{ 'true' if key == 'all' else 'false' }}">{{ label }} <span class="n">{{ n }}</span></button>
-          {% endfor %}
-        </div>
-      </div>
-      {% if not current_user.is_owner %}<p class="scope-note">You see only the {{ rows|length }} projects assigned to you.</p>{% endif %}
-
-      <div class="pgrid" id="grid">
-        {% for r in rows %}{% set p = r.p %}
-          <a class="pcard" href="{{ url_for('projects.detail', project_id=p.id) }}" style="--h:{{ hue(p) }}"
-             data-item data-name="{{ (p.name ~ ' ' ~ p.client_name)|lower }}" data-level="{{ r.level }}" data-waiting="{{ r.waiting }}" data-open="{{ r.open }}" data-active="{{ 1 if p.is_active else 0 }}">
-            <div class="pc-top"><span class="pav{% if not p.is_active %} off{% endif %}">{{ initials(p.name) }}</span>
-              <span class="pc-id"><strong>{{ p.name }}</strong><span>{{ r.live.url.replace("https://", "") if r.live and r.live.url else "No live address yet" }}</span></span>
-              <span class="hpill s-{{ r.level }}">{{ r.label }}</span></div>
-            <div class="pc-body">
-              {% if r.level != "ok" %}
-                <div class="pc-now s-{{ r.level }}">{{ icon('alert') }}<span>{{ r.reason }}<small>{{ "Open the project to roll back or debug" if r.level == "bad" else "Needs a look" }}</small></span></div>
-              {% else %}
-                <div class="pc-deploy">{{ icon('rocket') }}<span>{{ r.last_deploy.note if r.last_deploy else "No live release yet" }}</span></div>
-              {% endif %}
-              <div class="pc-meta"><span>{{ icon('branch') }}<span class="mono">{{ r.live.current_commit if r.live and r.live.current_commit else "—" }}</span></span>
-                <span>{{ icon('upload') }}{% if r.last_deploy %}Deployed {{ ago_of(r.last_deploy.created_at) }}{% else %}Never deployed{% endif %}</span></div>
-              <div class="chip-row"><span class="repo">{{ icon('github') }}<span>{{ p.github_repo or "No repo yet" }}</span></span>
-                {% for t in p.tech_stack %}<span class="tech" style="--h:{{ tech_hue(t) }}">{{ t }}</span>{% endfor %}
-                {% if not p.is_active %}<span class="tag-off">Dormant</span>{% endif %}
-                {% if p.needs_setup %}<span class="pill pill-warn">Needs setup</span>{% endif %}{% if p.repo_missing %}<span class="pill pill-bad">Repo missing</span>{% endif %}</div>
-            </div>
-            <div class="pc-foot"><span class="pc-client">{{ p.client_name }} · {{ "VPS" if p.host_type == "vps" else "cPanel" }}</span>
-              <span class="pc-counts">{% if r.open or r.waiting %}{% if r.open %}<span class="cnt">{{ icon('list') }}{{ r.open }} open</span>{% endif %}{% if r.waiting %}<span class="cnt cnt-wait">{{ icon('send') }}{{ r.waiting }} waiting</span>{% endif %}{% else %}<span class="cnt-none">No open changes</span>{% endif %}</span>
-              <span class="open">Open →</span></div>
-          </a>
-        {% endfor %}
-      </div>
-
-      <div class="plist" id="list" hidden>
-        <div class="plist-head"><span>Project</span><span>Status</span><span>Live version</span><span>Last deploy</span></div>
-        {% for r in rows %}{% set p = r.p %}
-          <a class="prow" href="{{ url_for('projects.detail', project_id=p.id) }}" style="--h:{{ hue(p) }}"
-             data-item data-name="{{ (p.name ~ ' ' ~ p.client_name)|lower }}" data-level="{{ r.level }}" data-waiting="{{ r.waiting }}" data-open="{{ r.open }}" data-active="{{ 1 if p.is_active else 0 }}">
-            <span class="who"><span class="pav{% if not p.is_active %} off{% endif %}">{{ initials(p.name) }}</span><span class="nm"><strong>{{ p.name }}</strong><span>{{ p.client_name }}{% if p.tech_stack %} · {{ p.tech_stack|join(" + ") }}{% endif %}</span></span></span>
-            <span class="col"><span class="st s-{{ r.level }}"><span class="ldot s-{{ r.level }}"></span>{{ r.label }}</span>{% if r.reason %}<span class="sub">{{ r.reason }}</span>{% endif %}</span>
-            <span class="col col-hide"><span class="commit">{{ icon('branch') }}<span class="mono">{{ r.live.current_commit if r.live else "—" }}</span></span><span class="sub">{{ r.last_deploy.note if r.last_deploy else "" }}</span></span>
-            {# HIDDEN until backups are worked on <span class="col col-hide"><span class="sub{% if r.backup_stale %} stale{% endif %}">{{ r.last_backup.created_at|ago if r.last_backup else "missing" }}</span></span> #}
-            <span class="col col-hide"><span>{{ ago_of(r.last_deploy.created_at if r.last_deploy else None) }}</span><span class="sub">{{ r.open }} open · {{ r.waiting }} waiting</span></span>
-          </a>
-        {% endfor %}
-      </div>
-      <div class="empty" id="empty" {% if rows %}hidden{% endif %}>No projects match. Clear the search or pick another filter.</div>
-    </section>
+  </aside>
   </div>
-
-  {% if current_user.is_owner %}
   <dialog class="dlg" id="dlg-answer">
     <form method="post" id="answer-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

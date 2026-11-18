@@ -70,82 +70,9 @@
     <div class="pc-now s-warn wrap">{{ icon('alert') }}<span>{{ repo_problem }}<small>Go Live is blocked so the wrong code can't go live.</small></span></div>
   {% endif %}
 
-  <aside class="p-rail" aria-label="Environments and live status">
-  <section class="envs" aria-label="Environments">
-    {% if beta %}
-    <article class="env">
-      <div class="env-top"><span class="env-name"><span class="h-ic" style="--h:215">{{ icon('sync') }}</span>Beta</span>
-        <a class="env-url mono" href="{{ beta.url }}" target="_blank" rel="noopener">{{ beta.url.replace("https://", "") }}</a>
-        <span class="mono env-commit">{{ beta.current_commit or "—" }}</span></div>
-      <p class="env-meta">Data from live {{ beta.last_sync_at|ago if beta.last_sync_at else "never synced" }} · {{ {"off": "messages off", "test": "messages to test numbers", "on": "MESSAGES ON"}[beta.message_mode] }} · payments {% if beta.payment_mode == "sandbox" %}sandbox{% else %}<strong>LIVE</strong>{% endif %}</p>
-      {% if beta_login %}
-      <details class="env-login"><summary>{{ icon('check') }} Locked — show login</summary>
-        <p>user <span class="mono">{{ beta_login[0] }}</span> · password <span class="mono">{{ beta_login[1] }}</span>
-          <button class="link-btn" type="button" data-copy-v="{{ beta_login[1] }}">Copy</button>
-          · <a class="link-btn" href="https://{{ beta_login[0]|urlencode }}:{{ beta_login[1]|urlencode }}@{{ beta.url.split('//')[-1] }}" target="_blank" rel="noopener noreferrer">Open beta (signed in)</a></p>
-      </details>{% endif %}
-    </article>
-    {% endif %}
-    {% if live %}
-    <article class="env env-live lv-{{ r.level }}">
-      <div class="env-top"><span class="env-name"><span class="h-ic" style="--h:150">{{ icon('rocket') }}</span>Live</span>
-        <a class="env-url mono" href="{{ live.url }}" target="_blank" rel="noopener">{{ live.url.replace("https://", "") }}</a>
-        <span class="mono env-commit">{{ live.current_release or live.current_commit or "—" }}</span></div>
-      <p class="env-meta">{% if r.last_deploy %}Deployed {{ r.last_deploy.created_at|ago }}{% else %}Never deployed from here{% endif %}
-        · {% if not p.monitor_enabled %}not watched{% elif live.last_check_at %}checked {{ live.last_check_at|ago }}{% if live.last_http_status %} · {{ live.last_response_ms }} ms{% endif %}{% else %}watched{% endif %}
-        {% if p.monitor_enabled %}· <form method="post" action="{{ url_for('projects.check_now', project_id=p.id) }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link-btn" type="submit">Check now</button></form>{% endif %}</p>
-    </article>
-    {% endif %}
-  </section>
 
-  {% if live and live.server and live.deploy_path and live.layout != "releases" %}
-  {% set dr = live.drift or {} %}{% set mine = dr.get("files", []) + dr.get("new", []) %}
-  <section class="panel-box live-drift" id="live-drift">
-    {% if not dr %}
-      <p class="hint">Live has not been compared with {{ p.default_branch or "main" }} yet.</p>
-    {% elif not dr.fetch_ok %}
-      <p class="msg msg-warn">The live server could not reach GitHub, so it could not be compared with {{ p.default_branch or "main" }}.</p>
-    {% elif mine or dr.ahead %}
-      <p class="msg msg-warn"><strong>Live differs from {{ p.default_branch or "main" }}.</strong>
-        {% if mine %}{{ mine|length }} file{{ "s" if mine|length != 1 }} changed on the live server (not committed){% endif %}{% if mine and dr.ahead %} · {% endif %}{% if dr.ahead %}{{ dr.ahead }} commit{{ "s" if dr.ahead != 1 }} not on GitHub{% endif %}.
-        {% if dr.behind %}{{ p.default_branch or "main" }} also has {{ dr.behind }} newer commit{{ "s" if dr.behind != 1 }}.{% endif %}</p>
-      {% if mine %}<details><summary>Show files</summary><ul class="summary-list mono">{% for f in mine[:50] %}<li>{{ f }}</li>{% endfor %}{% if mine|length > 50 %}<li>… {{ mine|length - 50 }} more</li>{% endif %}</ul></details>{% endif %}
-    {% elif dr.behind %}
-      <p class="msg"><strong>{{ p.default_branch or "main" }} has {{ dr.behind }} newer commit{{ "s" if dr.behind != 1 }} that live does not have yet.</strong></p>
-    {% else %}
-      <p class="hint">{{ icon('check') }} Live has the same code as {{ p.default_branch or "main" }}{% if live.drift_at %} · looked {{ live.drift_at|ago }}{% endif %}.</p>
-    {% endif %}
-    {% if owner %}
-    <div class="row-actions">
-      <form method="post" action="{{ url_for('projects.live_check', project_id=p.id) }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn" type="submit">Check live now</button></form>
-      {% if dr and dr.fetch_ok and (mine or dr.ahead) %}<button class="btn btn-primary" type="button" data-open="dlg-livepush">{{ icon('upload') }}Commit &amp; push to GitHub</button>{% endif %}
-      {% if dr and dr.fetch_ok and not (mine or dr.ahead) %}<button class="btn" type="button" data-open="dlg-liveupdate" {% if not dr.behind %}disabled title="Live already has everything {{ p.default_branch or 'main' }} has"{% endif %}>{{ icon('rocket') }}Update live from {{ p.default_branch or "main" }}</button>{% endif %}
-    </div>
-    {% endif %}
-  </section>
-  {% endif %}
-    {% if open_changes %}
-    <section class="rail-card" aria-label="Open changes">
-      <div class="rc-head"><h3>Open changes</h3><span class="rc-n">{{ open_changes|length }}</span></div>
-      <ul>
-        {% for c in open_changes[:6] %}
-          <li><button type="button" class="rc-item" data-goto-change="{{ c.id }}" title="Open this change in the chat"><span class="rc-t">{{ c.title }}</span><span class="rc-m">#{{ c.id }} · {{ c.created_at|ago }}</span>{{ pill(c) }}</button></li>
-        {% endfor %}
-      </ul>
-    </section>
-    {% endif %}
-    {% if recent_jobs %}
-    <section class="rail-card" aria-label="Recent runs">
-      <div class="rc-head"><h3>Recent runs</h3><button type="button" class="rc-more" data-tab="deploys">All</button></div>
-      <ul>
-        {% for j in recent_jobs[:5] %}
-          <li class="rc-row"><span class="rc-t">{{ j.kind.replace("_", " ")|capitalize }}</span><span class="rc-m">{{ j.created_at|ago }} · {{ j.by_user.name if j.by_user else "System" }}</span>{% if j.state == "done" %}<span class="pill pill-ok">Done</span>{% elif j.state == "failed" %}<span class="pill pill-bad">Failed</span>{% else %}<span class="pill pill-accent">Running</span>{% endif %}</li>
-        {% endfor %}
-      </ul>
-    </section>
-    {% endif %}
-  </aside>
-
+  <div class="p-body">
+  <div class="p-main">
   {% if running_job %}
     <div class="agent-run" data-job-poll="{{ url_for('projects.job_status', job_id=running_job.id) }}">
       <span class="spin" aria-hidden="true"></span><span><strong>{{ {"beta_deploy": "Beta deploy", "sync": "Live → Beta sync", "go_live": "Go Live", "rollback": "Rollback", "beta_setup": "Automatic beta setup", "beta_lock": "Beta password", "live_push": "Commit & push of the live folder", "live_update": "Updating live from main", "beta_api": "Opening the beta API for the apps", "change_debug": "Claude checks the beta"}.get(running_job.kind, running_job.kind) }} running</strong> · <span data-note>{{ running_job.note }}</span><small>Started by {{ running_job.by_user.name if running_job.by_user else "System" }} — this page updates by itself.</small></span>
@@ -702,4 +629,81 @@
     </form>
     {% endif %}
   </section>
+  </div>
+  <aside class="p-rail" aria-label="Environments and live status">
+  <section class="envs" aria-label="Environments">
+    {% if beta %}
+    <article class="env">
+      <div class="env-top"><span class="env-name"><span class="h-ic" style="--h:215">{{ icon('sync') }}</span>Beta</span>
+        <a class="env-url mono" href="{{ beta.url }}" target="_blank" rel="noopener">{{ beta.url.replace("https://", "") }}</a>
+        <span class="mono env-commit">{{ beta.current_commit or "—" }}</span></div>
+      <p class="env-meta">Data from live {{ beta.last_sync_at|ago if beta.last_sync_at else "never synced" }} · {{ {"off": "messages off", "test": "messages to test numbers", "on": "MESSAGES ON"}[beta.message_mode] }} · payments {% if beta.payment_mode == "sandbox" %}sandbox{% else %}<strong>LIVE</strong>{% endif %}</p>
+      {% if beta_login %}
+      <details class="env-login"><summary>{{ icon('check') }} Locked — show login</summary>
+        <p>user <span class="mono">{{ beta_login[0] }}</span> · password <span class="mono">{{ beta_login[1] }}</span>
+          <button class="link-btn" type="button" data-copy-v="{{ beta_login[1] }}">Copy</button>
+          · <a class="link-btn" href="https://{{ beta_login[0]|urlencode }}:{{ beta_login[1]|urlencode }}@{{ beta.url.split('//')[-1] }}" target="_blank" rel="noopener noreferrer">Open beta (signed in)</a></p>
+      </details>{% endif %}
+    </article>
+    {% endif %}
+    {% if live %}
+    <article class="env env-live lv-{{ r.level }}">
+      <div class="env-top"><span class="env-name"><span class="h-ic" style="--h:150">{{ icon('rocket') }}</span>Live</span>
+        <a class="env-url mono" href="{{ live.url }}" target="_blank" rel="noopener">{{ live.url.replace("https://", "") }}</a>
+        <span class="mono env-commit">{{ live.current_release or live.current_commit or "—" }}</span></div>
+      <p class="env-meta">{% if r.last_deploy %}Deployed {{ r.last_deploy.created_at|ago }}{% else %}Never deployed from here{% endif %}
+        · {% if not p.monitor_enabled %}not watched{% elif live.last_check_at %}checked {{ live.last_check_at|ago }}{% if live.last_http_status %} · {{ live.last_response_ms }} ms{% endif %}{% else %}watched{% endif %}
+        {% if p.monitor_enabled %}· <form method="post" action="{{ url_for('projects.check_now', project_id=p.id) }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link-btn" type="submit">Check now</button></form>{% endif %}</p>
+    </article>
+    {% endif %}
+  </section>
+
+  {% if live and live.server and live.deploy_path and live.layout != "releases" %}
+  {% set dr = live.drift or {} %}{% set mine = dr.get("files", []) + dr.get("new", []) %}
+  <section class="panel-box live-drift" id="live-drift">
+    {% if not dr %}
+      <p class="hint">Live has not been compared with {{ p.default_branch or "main" }} yet.</p>
+    {% elif not dr.fetch_ok %}
+      <p class="msg msg-warn">The live server could not reach GitHub, so it could not be compared with {{ p.default_branch or "main" }}.</p>
+    {% elif mine or dr.ahead %}
+      <p class="msg msg-warn"><strong>Live differs from {{ p.default_branch or "main" }}.</strong>
+        {% if mine %}{{ mine|length }} file{{ "s" if mine|length != 1 }} changed on the live server (not committed){% endif %}{% if mine and dr.ahead %} · {% endif %}{% if dr.ahead %}{{ dr.ahead }} commit{{ "s" if dr.ahead != 1 }} not on GitHub{% endif %}.
+        {% if dr.behind %}{{ p.default_branch or "main" }} also has {{ dr.behind }} newer commit{{ "s" if dr.behind != 1 }}.{% endif %}</p>
+      {% if mine %}<details><summary>Show files</summary><ul class="summary-list mono">{% for f in mine[:50] %}<li>{{ f }}</li>{% endfor %}{% if mine|length > 50 %}<li>… {{ mine|length - 50 }} more</li>{% endif %}</ul></details>{% endif %}
+    {% elif dr.behind %}
+      <p class="msg"><strong>{{ p.default_branch or "main" }} has {{ dr.behind }} newer commit{{ "s" if dr.behind != 1 }} that live does not have yet.</strong></p>
+    {% else %}
+      <p class="hint">{{ icon('check') }} Live has the same code as {{ p.default_branch or "main" }}{% if live.drift_at %} · looked {{ live.drift_at|ago }}{% endif %}.</p>
+    {% endif %}
+    {% if owner %}
+    <div class="row-actions">
+      <form method="post" action="{{ url_for('projects.live_check', project_id=p.id) }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn" type="submit">Check live now</button></form>
+      {% if dr and dr.fetch_ok and (mine or dr.ahead) %}<button class="btn btn-primary" type="button" data-open="dlg-livepush">{{ icon('upload') }}Commit &amp; push to GitHub</button>{% endif %}
+      {% if dr and dr.fetch_ok and not (mine or dr.ahead) %}<button class="btn" type="button" data-open="dlg-liveupdate" {% if not dr.behind %}disabled title="Live already has everything {{ p.default_branch or 'main' }} has"{% endif %}>{{ icon('rocket') }}Update live from {{ p.default_branch or "main" }}</button>{% endif %}
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
+    {% if open_changes %}
+    <section class="rail-card" aria-label="Open changes">
+      <div class="rc-head"><h3>Open changes</h3><span class="rc-n">{{ open_changes|length }}</span></div>
+      <ul>
+        {% for c in open_changes[:6] %}
+          <li><button type="button" class="rc-item" data-goto-change="{{ c.id }}" title="Open this change in the chat"><span class="rc-t">{{ c.title }}</span><span class="rc-m">#{{ c.id }} · {{ c.created_at|ago }}</span>{{ pill(c) }}</button></li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+    {% if recent_jobs %}
+    <section class="rail-card" aria-label="Recent runs">
+      <div class="rc-head"><h3>Recent runs</h3><button type="button" class="rc-more" data-tab="deploys">All</button></div>
+      <ul>
+        {% for j in recent_jobs[:5] %}
+          <li class="rc-row"><span class="rc-t">{{ j.kind.replace("_", " ")|capitalize }}</span><span class="rc-m">{{ j.created_at|ago }} · {{ j.by_user.name if j.by_user else "System" }}</span>{% if j.state == "done" %}<span class="pill pill-ok">Done</span>{% elif j.state == "failed" %}<span class="pill pill-bad">Failed</span>{% else %}<span class="pill pill-accent">Running</span>{% endif %}</li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+  </aside>
+  </div>
 {% endblock %}
