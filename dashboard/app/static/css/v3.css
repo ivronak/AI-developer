@@ -541,3 +541,57 @@ details.needs[open] > .needs-head { border-bottom: 1px solid var(--line); }
   html.chat-docked .composer.opts-open .composer-bar { flex-wrap: wrap; }
   html.chat-docked .composer.opts-open .chip-row { flex-wrap: wrap; row-gap: 6px; }
 }
+
+/* ---- project cards: no warning box; the reason appears when you hover (or focus) the status ---- */
+a.pcard .hpill[data-reason] { position: relative; cursor: help; }
+a.pcard .hpill[data-reason]::after {
+  content: attr(data-reason); position: absolute; right: 0; top: calc(100% + 8px); z-index: 25; width: max-content; max-width: 250px; padding: 8px 11px;
+  border-radius: 8px; background: var(--fg); color: var(--bg); font-size: 12.5px; font-weight: 400; line-height: 1.45; text-align: left; white-space: normal;
+  box-shadow: var(--shadow-pop); opacity: 0; visibility: hidden; transform: translateY(-3px); pointer-events: none;
+  transition: opacity var(--dur-fast), transform var(--dur-base) var(--ease-out), visibility var(--dur-fast);
+}
+a.pcard .hpill[data-reason]:hover::after, a.pcard .hpill[data-reason]:focus-visible::after { opacity: 1; visibility: visible; transform: none; }
+a.pcard .hpill[data-reason]:focus-visible { outline: none; box-shadow: var(--focus); }
+a.pcard { overflow: visible; }
+a.pcard .pc-foot { border-radius: 0 0 11px 11px; }
+
+/* =====================================================================
+   CHAT v3.5 — the chat is the hero: tiny chrome, one-line status, bigger readable text, focus mode
+   ===================================================================== */
+@media (min-width: 1100px) {
+  html.chat-docked .dock-bar { height: 38px; padding: 0 6px 0 12px; }
+  html.chat-docked .dock-bar > span { display: none; }
+  html.chat-docked .chat-panel > .pick { padding: 6px 10px; gap: 6px; }
+  html.chat-docked .chat-panel > .pick button { height: 30px; padding: 0 11px; font-size: 12.5px; }
+
+  /* status = one slim strip: title + pill, then a thin progress bar with the main button */
+  html.chat-docked .chat-scroll > [data-change] > .ccard { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 7px 10px 8px; margin: 0 10px 2px; }
+  html.chat-docked .ccard-head { order: 0; flex: 1 1 100%; }
+  html.chat-docked .stepper { order: 1; flex: 1 1 0; min-width: 80px; gap: 3px; }
+  html.chat-docked .stepper li { font-size: 0; gap: 0; }
+  html.chat-docked .stepper li::before { height: 4px; }
+  html.chat-docked .ccard-acts { order: 2; display: flex; gap: 6px; flex: none; margin: 0; }
+  html.chat-docked .ccard-acts .btn { min-height: 28px; height: 28px; font-size: 12.5px; padding: 0 10px; }
+  html.chat-docked .ccard-acts a.btn { font-size: 0; gap: 0; padding: 0 8px; }
+  html.chat-docked .ccard-acts a.btn svg { width: 15px; height: 15px; }
+  html.chat-docked .ccard.is-open { flex-direction: column; align-items: stretch; }
+  html.chat-docked .ccard.is-open .stepper li { font-size: 10px; }
+  html.chat-docked .ccard.is-open .stepper li::before { margin-bottom: 4px; }
+
+  /* messages: larger, calmer, more contrast */
+  html.chat-docked .thread-box { padding: 14px 16px 10px; }
+  html.chat-docked .thread { gap: 20px; }
+  html.chat-docked .thread .md { font-size: 14.5px; line-height: 1.7; color: var(--fg); }
+  html.chat-docked .thread .bubble.b-owner { font-size: 14.5px; line-height: 1.55; }
+  html.chat-docked .thread .bubble.b-claude .who { font-size: 12px; margin-bottom: 4px; }
+
+  /* focus mode: the chat takes the whole work area, text centred at a comfortable width */
+  html.chat-docked.chat-focus main.page { background: transparent; border: 0; margin: 0; padding: 0; min-height: 0; }
+  html.chat-docked.chat-focus main.page > :not(.p-body) { display: none; }
+  html.chat-docked.chat-focus .p-body > .p-rail, html.chat-docked.chat-focus .p-main > :not(.chat-panel) { display: none; }
+  html.chat-docked.chat-focus .chat-panel { left: calc(var(--side-w) + 8px); right: 8px; width: auto; }
+  html.chat-docked.chat-focus .chat-panel > .pick, html.chat-docked.chat-focus .chat-scroll > [data-change] > .ccard, html.chat-docked.chat-focus .chat-panel form.composer { width: 100%; max-width: 860px; margin-inline: auto; }
+  html.chat-docked.chat-focus .thread-box { padding-inline: max(16px, calc((100% - 820px) / 2)); }
+  html.chat-docked.chat-focus .dock-resize { display: none; }
+  html.chat-docked.chat-focus .ccard.is-open { max-width: 860px; }
+}

@@ -71,13 +71,9 @@
              data-item data-name="{{ (p.name ~ ' ' ~ p.client_name)|lower }}" data-level="{{ r.level }}" data-waiting="{{ r.waiting }}" data-open="{{ r.open }}" data-active="{{ 1 if p.is_active else 0 }}">
             <div class="pc-top"><span class="pav{% if not p.is_active %} off{% endif %}">{{ initials(p.name) }}</span>
               <span class="pc-id"><strong>{{ p.name }}</strong><span>{{ r.live.url.replace("https://", "") if r.live and r.live.url else "No live address yet" }}</span></span>
-              <span class="hpill s-{{ r.level }}">{{ r.label }}</span></div>
+              <span class="hpill s-{{ r.level }}"{% if r.level != "ok" %} data-reason="{{ r.reason }}" tabindex="0" aria-label="{{ r.label }}: {{ r.reason }}"{% endif %}>{{ r.label }}</span></div>
             <div class="pc-body">
-              {% if r.level != "ok" %}
-                <div class="pc-now s-{{ r.level }}">{{ icon('alert') }}<span>{{ r.reason }}<small>{{ "Open the project to roll back or debug" if r.level == "bad" else "Needs a look" }}</small></span></div>
-              {% else %}
-                <div class="pc-deploy">{{ icon('rocket') }}<span>{{ r.last_deploy.note if r.last_deploy else "No live release yet" }}</span></div>
-              {% endif %}
+              <div class="pc-deploy">{{ icon('rocket') }}<span>{{ r.last_deploy.note if r.last_deploy else "No live release yet" }}</span></div>
               <div class="pc-meta"><span>{{ icon('branch') }}<span class="mono">{{ r.live.current_commit if r.live and r.live.current_commit else "—" }}</span></span>
                 <span>{{ icon('upload') }}{% if r.last_deploy %}Deployed {{ ago_of(r.last_deploy.created_at) }}{% else %}Never deployed{% endif %}</span></div>
               <div class="chip-row"><span class="repo">{{ icon('github') }}<span>{{ p.github_repo or "No repo yet" }}</span></span>

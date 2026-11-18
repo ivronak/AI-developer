@@ -150,13 +150,14 @@
     function get(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
     function put(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
     var mode = get("apd.dock", "right"), storedW = get("apd.dockw", null);
-    function defW() { return Math.max(340, Math.min(460, Math.round(window.innerWidth * 0.3))); }
+    function defW() { return Math.max(360, Math.min(520, Math.round(window.innerWidth * 0.36))); }
     var w = storedW ? (parseInt(storedW, 10) || defW()) : defW();
     var ICON = {
       side: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>',
       wide: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>',
       hide: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>'
     };
+    var view = get("apd.dockview", "normal");
     var h1 = document.querySelector(".phead-id h1");
     var bar = el("div", "dock-bar"), title = el("strong", "", "Chat"); bar.appendChild(title);
     var sub = el("span", "", h1 && h1.firstChild ? h1.firstChild.textContent.trim() : ""); sub.style.cssText = "font-size:12.5px;color:var(--muted);margin-right:auto;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
@@ -169,7 +170,10 @@
     function apply() {
       var on = mq.matches && mode !== "off";
       root.classList.toggle("chat-docked", on); root.classList.toggle("dock-left", on && mode === "left");
-      root.style.setProperty("--dock-w", w + "px"); fab.hidden = !(mq.matches && mode === "off");
+      root.style.setProperty("--dock-w", (view === "wide" ? Math.max(w, 620) : w) + "px"); fab.hidden = !(mq.matches && mode === "off");
+      root.classList.toggle("chat-focus", on && view === "focus");
+      var ab = bar.querySelector('[data-dock-act="wide"]'); if (ab) { var tt = view === "normal" ? "Make the chat wider" : view === "wide" ? "Focus: chat only" : "Back to the side dock (Esc)"; ab.title = tt; ab.setAttribute("aria-label", tt); }
+      var ob2 = document.querySelectorAll(".ccard-acts a.btn"); for (var oi = 0; oi < ob2.length; oi++) if (!ob2[oi].title) ob2[oi].title = ob2[oi].textContent.trim() || "Open";
       var pref = get("apd.side", "0") === "1";
       root.classList.toggle("side-collapsed", (on && window.innerWidth < 1500) || pref);
       var comp = document.getElementById("composer");
@@ -193,7 +197,7 @@
     bar.addEventListener("click", function (e) {
       var b = e.target.closest("[data-dock-act]"); if (!b) return; var act = b.getAttribute("data-dock-act");
       if (act === "side") { mode = mode === "left" ? "right" : "left"; put("apd.dock", mode); }
-      else if (act === "wide") { w = w < 520 ? 600 : defW(); put("apd.dockw", String(w)); }
+      else if (act === "wide") { view = view === "normal" ? "wide" : view === "wide" ? "focus" : "normal"; put("apd.dockview", view); }
       else if (act === "hide") { mode = "off"; put("apd.dock", mode); var c = document.querySelector('[data-tab="chat"]'); }
       apply();
       if (mode === "off") { var c2 = document.querySelector('[data-tab="chat"]'); if (c2) c2.click(); }
@@ -209,6 +213,7 @@
       function up() { root.classList.remove("dock-dragging"); handle.removeEventListener("pointermove", move); handle.removeEventListener("pointerup", up); put("apd.dockw", String(w)); }
       handle.addEventListener("pointermove", move); handle.addEventListener("pointerup", up);
     });
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape" && view === "focus" && !document.querySelector("dialog[open]") && !(pal && !pal.hidden)) { view = "normal"; put("apd.dockview", view); apply(); } });
     if (mq.addEventListener) mq.addEventListener("change", apply); else if (mq.addListener) mq.addListener(apply);
     document.addEventListener("click", function (e) { var t = e.target.closest && e.target.closest(".ccard-tgl"); if (t) { var c = t.closest(".ccard"); if (c) c.classList.toggle("is-open"); } });
     apply(); window.addEventListener("load", apply); window.addEventListener("resize", apply);
