@@ -478,3 +478,5 @@ Big picture lives in `TRACKER.md` (status, decisions) and `CHANGES.md` (the "zer
 - 2026-11-18 · Structure v3.1 (UI only): overview and project page use main + right rail (CSS grid, p-rail aside), sidebar lists Needs attention + Recent projects with status dots, view mode remembered, highlight palette (blue next action, green Go Live, amber, red, violet waiting) for KPIs, cards, buttons, stepper, approvals, activity icons. 524 checks.
 
 - 2026-11-18 · Layout v3.2 (UI only): home = "Needs you now" queue first + compact one-line project list as default (view toggle kept), project header summary strip (live status / last deploy / commit / response / open / waiting), rail reorder. 524 checks.
+
+- 2026-11-18 · Rails always useful (UI only): both rails are sticky (a tall rail sticks by its bottom edge via JS, a short one by its top), project rail gained "Open changes" (click opens the change in the chat) and "Recent runs" cards, home activity list taller, list rows no longer wrap. 524 checks.

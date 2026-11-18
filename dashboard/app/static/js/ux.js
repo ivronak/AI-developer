@@ -143,6 +143,21 @@
       if (!document.querySelector("dialog[open]")) { e.preventDefault(); openPalette(); }
     }
   });
+  /* rails stay in view while the page scrolls (a tall rail sticks by its bottom edge, a short one by its top) */
+  function stickyRails() {
+    var rails = document.querySelectorAll(".p-rail, main.page > .panels"); if (!rails.length) return;
+    function fit() { for (var i = 0; i < rails.length; i++) { var h = rails[i].offsetHeight; rails[i].style.top = Math.min(16, window.innerHeight - h - 16) + "px"; } }
+    fit(); window.addEventListener("resize", fit);
+    if (window.ResizeObserver) for (var k = 0; k < rails.length; k++) new ResizeObserver(fit).observe(rails[k]);
+  }
+  /* project page: a change in the rail opens in the chat */
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-goto-change]"); if (!b) return;
+    var tab = document.querySelector('[data-tab="chat"]'); if (tab) tab.click();
+    var pk = document.querySelector('.pick [data-pick="' + b.getAttribute("data-goto-change") + '"]'); if (pk) pk.click();
+    var tb = document.getElementById("tabs"); if (tb) tb.scrollIntoView({ block: "start" });
+  });
+
   /* sidebar: your projects (needs attention first, then recent), with status dots */
   function sidebarProjects() {
     var nav = document.querySelector(".topbar-in"), acts = document.querySelector(".top-actions"); if (!nav || !acts) return;
@@ -405,7 +420,7 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
-    spy(); initSettings(); initLog(); sidebarProjects(); rememberView(); copyButtons(document); filterLists(document);
+    spy(); initSettings(); initLog(); sidebarProjects(); rememberView(); stickyRails(); copyButtons(document); filterLists(document);
     var cn = document.querySelectorAll(".tabs-sm .n"); for (var c = 0; c < cn.length; c++) if (cn[c].textContent.trim() !== "0") cn[c].classList.add("nz");
     var kz = document.querySelectorAll(".kpi b");
     for (var z = 0; z < kz.length; z++) if (kz[z].textContent.trim() === "0") { var kp = kz[z].closest(".kpi"); if (kp) kp.classList.add("is-zero"); }

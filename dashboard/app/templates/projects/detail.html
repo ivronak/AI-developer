@@ -124,6 +124,26 @@
     {% endif %}
   </section>
   {% endif %}
+    {% if open_changes %}
+    <section class="rail-card" aria-label="Open changes">
+      <div class="rc-head"><h3>Open changes</h3><span class="rc-n">{{ open_changes|length }}</span></div>
+      <ul>
+        {% for c in open_changes[:6] %}
+          <li><button type="button" class="rc-item" data-goto-change="{{ c.id }}" title="Open this change in the chat"><span class="rc-t">{{ c.title }}</span><span class="rc-m">#{{ c.id }} · {{ c.created_at|ago }}</span>{{ pill(c) }}</button></li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+    {% if recent_jobs %}
+    <section class="rail-card" aria-label="Recent runs">
+      <div class="rc-head"><h3>Recent runs</h3><button type="button" class="rc-more" data-tab="deploys">All</button></div>
+      <ul>
+        {% for j in recent_jobs[:5] %}
+          <li class="rc-row"><span class="rc-t">{{ j.kind.replace("_", " ")|capitalize }}</span><span class="rc-m">{{ j.created_at|ago }} · {{ j.by_user.name if j.by_user else "System" }}</span>{% if j.state == "done" %}<span class="pill pill-ok">Done</span>{% elif j.state == "failed" %}<span class="pill pill-bad">Failed</span>{% else %}<span class="pill pill-accent">Running</span>{% endif %}</li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
   </aside>
 
   {% if running_job %}
