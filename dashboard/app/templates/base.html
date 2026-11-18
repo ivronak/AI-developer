@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>{% block title %}{{ title }}{% endblock %} · {{ APP_NAME }}</title>
+  <script>try { if (localStorage.getItem("apd.side") === "1") document.documentElement.classList.add("side-collapsed"); } catch (e) {}</script>
   <script>try { var t = localStorage.getItem("apd.theme"); if (t) document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -37,14 +38,18 @@
         {% if crumb and crumb != sec[0] %}<span class="sep">/</span><strong>{{ crumb }}</strong>{% endif %}
       </nav>
       <nav class="inavs" aria-label="Main">
+        {% set nv = namespace(admin=false) %}
         {% for n in NAV if owner or not n.owner_only %}
+          {% if loop.first %}<span class="nav-label">Workspace</span>{% endif %}
+          {% if n.owner_only and not nv.admin %}{% set nv.admin = true %}<span class="nav-label">Admin</span>{% endif %}
           <a href="{{ url_for(n.endpoint) }}" class="inav{% if page == n.key %} is-on{% endif %}"{% if page == n.key %} aria-current="page"{% endif %}
              aria-label="{{ n.label }}" data-tip="{{ n.label }}">{{ icon(n.icon) }}<span class="inav-l">{{ n.label }}</span></a>
         {% endfor %}
       </nav>
       <div class="top-actions">
+        <button class="icon-btn side-toggle" type="button" data-side-toggle aria-label="Collapse the sidebar" data-tip="Collapse"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg><span class="side-l">Collapse</span></button>
         <button class="icon-btn find-btn" type="button" id="find-btn" aria-label="Find (F)" data-tip="Find · F">{{ icon('search') }}</button>
-        <button class="icon-btn" type="button" id="bell" aria-label="Alerts" aria-expanded="false" aria-controls="alerts-panel" data-tip="Alerts">{{ icon('bell') }}{% if unseen_alerts %}<span class="badge">{{ unseen_alerts }}</span>{% endif %}</button>
+        <button class="icon-btn" type="button" id="bell" aria-label="Alerts" aria-expanded="false" aria-controls="alerts-panel" data-tip="Alerts">{{ icon('bell') }}<span class="side-l">Alerts</span>{% if unseen_alerts %}<span class="badge">{{ unseen_alerts }}</span>{% endif %}</button>
         <button class="icon-btn" type="button" data-theme-toggle aria-label="Switch light / dark theme" data-tip="Theme"></button>
         <a class="me" href="{{ url_for('auth.account') }}" title="My account">
           <span class="avatar">{{ current_user.initials }}</span>

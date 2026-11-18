@@ -143,6 +143,34 @@
       if (!document.querySelector("dialog[open]")) { e.preventDefault(); openPalette(); }
     }
   });
+  /* sidebar: collapse to icons, remembered */
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest && e.target.closest("[data-side-toggle]"); if (!t) return;
+    var on = document.documentElement.classList.toggle("side-collapsed");
+    try { localStorage.setItem("apd.side", on ? "1" : "0"); } catch (err) {}
+    t.setAttribute("aria-label", on ? "Expand the sidebar" : "Collapse the sidebar"); t.setAttribute("data-tip", on ? "Expand" : "Collapse");
+  });
+
+  /* activity log: quick find, long details fold */
+  function initLog() {
+    var rows = document.querySelector(".log-sec .rows"); if (!rows) return;
+    var inp = el("input", "log-find"); inp.type = "search"; inp.placeholder = "Find in this list — a person, project or word…"; inp.setAttribute("aria-label", "Find in the activity list");
+    rows.parentNode.insertBefore(inp, rows);
+    inp.addEventListener("input", function () {
+      var q = inp.value.trim().toLowerCase(), kids = rows.children, vis = false, head = null, anyInGroup = false, i;
+      function flush() { if (head) head.hidden = !anyInGroup; }
+      for (i = 0; i < kids.length; i++) {
+        var k = kids[i];
+        if (k.classList.contains("day-head")) { flush(); head = k; anyInGroup = false; continue; }
+        var hit = !q || k.textContent.toLowerCase().indexOf(q) > -1; k.hidden = !hit; if (hit) anyInGroup = true;
+      }
+      flush();
+    });
+    rows.addEventListener("click", function (e) {
+      var t = e.target.closest(".row-main .row-sub, .log-prompt"); if (t) t.classList.toggle("is-open");
+    });
+  }
+
   document.addEventListener("click", function (e) {
     if (e.target.closest("[data-cmdk]")) { e.preventDefault(); openPalette(); return; }
     if (e.target.closest("#find-btn") && !document.querySelector("[data-find]")) openPalette();
@@ -326,7 +354,7 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
-    spy(); initSettings(); copyButtons(document); filterLists(document);
+    spy(); initSettings(); initLog(); copyButtons(document); filterLists(document);
     var cn = document.querySelectorAll(".tabs-sm .n"); for (var c = 0; c < cn.length; c++) if (cn[c].textContent.trim() !== "0") cn[c].classList.add("nz");
     var kz = document.querySelectorAll(".kpi b");
     for (var z = 0; z < kz.length; z++) if (kz[z].textContent.trim() === "0") { var kp = kz[z].closest(".kpi"); if (kp) kp.classList.add("is-zero"); }

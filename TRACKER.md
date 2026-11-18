@@ -241,3 +241,5 @@ Everything decided after the PRD that changes what it says. The PRD stays the ba
 - 2026-11-18 · Fix (CSS only): checkbox rows inside .field (project memory file picker) were stacked by my label rule — now one line; memory picker is a tidy 3-column grid with ticked files highlighted. 524 checks.
 
 - 2026-11-18 · Projects overview v2 (UI only): Health = donut ring + legend + clickable attention rows (or "All clear"), Activity = quiet timeline with sticky days + fade, Approvals = project-coloured cards + friendlier empty state, filter bar = segmented control with coloured counts, project cards in 3 columns with status dot on the avatar. 524 checks.
+
+- 2026-11-18 · Users & log + sidebar v2 (UI only): authenticator policy as a switch, calmer user cards with facts strip, activity log with quick find / sticky days / folding long details / time+actor column; sidebar with Workspace/Admin groups, active accent bar, Alerts row with count, user card, theme/logout/collapse buttons, collapsible icon rail (remembered, tooltips). 524 checks.

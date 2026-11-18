@@ -30,7 +30,7 @@
       <form method="post" action="{{ url_for('users.security') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="require_2fa" value="{{ '0' if require_2fa else '1' }}">
-        <button class="btn {{ 'btn-danger' if require_2fa else 'btn-primary' }}" type="submit">{{ "Make it optional" if require_2fa else "Make it required" }}</button>
+        <button class="switch{% if require_2fa %} is-on{% endif %}" type="submit" role="switch" aria-checked="{{ 'true' if require_2fa else 'false' }}" aria-label="Require the authenticator app for everyone" title="{{ 'Click to make it optional' if require_2fa else 'Click to make it required' }}"><span class="switch-state">{{ "Required" if require_2fa else "Optional" }}</span><i></i></button>
       </form>
     </div>
   </section>
@@ -42,22 +42,21 @@
       <article class="ucard{% if not u.is_active %} is-off{% endif %}" style="--h:{{ h }}">
         <div class="ucard-band">
           <span class="pav{% if not u.is_active %} off{% endif %}">{{ u.initials }}</span>
-          <div class="ucard-id"><h2>{{ u.name }}{% if mine %} <span class="hint">(you)</span>{% endif %}</h2>
+          <div class="ucard-id"><h2>{{ u.name }}{% if mine %} <span class="hint">(you)</span>{% endif %} <span class="role-chip">{{ "Owner" if u.is_owner else "Developer" }}</span></h2>
             <p class="contact">{{ u.email }} · {{ u.mobile }}</p></div>
           <span class="hpill {{ 's-ok' if u.is_active else 's-bad' }}">{{ "Access on" if u.is_active else "Access off" }}</span>
         </div>
         <div class="ucard-body">
           <div class="chip-row">
-            <span class="role-chip">{{ "Owner" if u.is_owner else "Developer" }}</span>
             {% if u.is_owner %}<span class="tech" style="--h:245">All projects</span>
             {% else %}
               {% for m in u.memberships %}<span class="tech" style="--h:{{ hue(m.project_id) }}">{{ m.project.name }}</span>{% else %}<span class="tag-off">No projects</span>{% endfor %}
             {% endif %}
           </div>
-          <dl class="kv">
-            <dt>Authenticator</dt><dd>{% if u.totp_enabled %}<span class="pill pill-ok">On</span>{% else %}<span class="pill pill-warn">Not set up</span>{% endif %}</dd>
-            <dt>Password</dt><dd>{{ "Set" if u.password_hash else "Waiting for the person to set it" }}</dd>
-            <dt>Last sign-in</dt><dd>{{ u.last_login_at|ago }}</dd>
+          <dl class="facts">
+            <div><dt>Authenticator</dt><dd>{% if u.totp_enabled %}<span class="pill pill-ok">On</span>{% else %}<span class="pill pill-warn">Not set up</span>{% endif %}</dd></div>
+            <div><dt>Password</dt><dd>{{ "Set" if u.password_hash else "Not set yet" }}{% if not u.password_hash %}<small>Waiting for the person</small>{% endif %}</dd></div>
+            <div><dt>Last sign-in</dt><dd>{{ u.last_login_at|ago }}</dd></div>
           </dl>
           {% if not u.is_owner %}
           <div class="ucard-acts">
@@ -149,7 +148,7 @@
               {% if l.prompt_text %}<span class="log-prompt">Prompt: {{ l.prompt_text }}</span>{% endif %}
             </div>
           </div>
-          <div class="row-side"><span class="row-sub">{{ l.user.name if l.user else ("Client" if l.action.startswith("Client") else "System") }}<br>{{ lt.strftime("%H:%M") }}{% if l.ip %} · {{ l.ip }}{% endif %}</span></div>
+          <div class="row-side log-side"><span class="log-time">{{ lt.strftime("%H:%M") }}</span><span class="row-sub log-who"{% if l.ip %} title="From {{ l.ip }}"{% endif %}>{{ l.user.name if l.user else ("Client" if l.action.startswith("Client") else "System") }}</span></div>
         </div>
       {% else %}
         <div class="empty">No activity matches.</div>
