@@ -16,8 +16,9 @@
   <a class="pc-now" href="{{ url_for('settings.index') }}" style="text-decoration:none;color:inherit">{{ icon('gear') }}<span>This page is only your own sign-in. GitHub and other dashboard connections are in <strong>Settings</strong> →<small>The ⚙️ icon in the top bar.</small></span></a>
   {% endif %}
   <div class="card-grid">
-    <section class="card" aria-labelledby="h-2fa">
-      <h2 id="h-2fa"><span class="h-ic" style="--h:150">{{ icon('check') }}</span>Authenticator app</h2>
+    <details class="card set" id="acc-2fa"{% if not current_user.totp_enabled %} open{% endif %}>
+      <summary class="set-sum"><span class="h-ic" style="--h:150">{{ icon('check') }}</span><span class="set-t"><strong>Authenticator app</strong><small>The 6-digit code that protects your sign-in</small></span>{% if current_user.totp_enabled %}<span class="pill pill-ok">On</span>{% else %}<span class="pill pill-warn">Off</span>{% endif %}</summary>
+      <div class="set-body">
       {% if current_user.totp_enabled %}
         <p>Every sign-in asks for the 6-digit code from your phone. {% if require_2fa %}The owner has made it required for everyone.{% endif %}</p>
         <p class="hint">Recovery codes left: <strong>{{ current_user.recovery_codes|length }}</strong> of 8.</p>
@@ -54,10 +55,11 @@
           <button class="btn btn-primary" type="submit">Set up authenticator</button>
         </form>
       {% endif %}
-    </section>
+    </div></details>
 
-    <section class="card" aria-labelledby="h-pw">
-      <h2 id="h-pw"><span class="h-ic" style="--h:245">{{ icon('users') }}</span>Change password</h2>
+    <details class="card set" id="acc-pw">
+      <summary class="set-sum"><span class="h-ic" style="--h:245">{{ icon('users') }}</span><span class="set-t"><strong>Change password</strong><small>Use a long password nobody else knows</small></span><span></span></summary>
+      <div class="set-body">
       <form method="post" action="{{ url_for('auth.account_password') }}" class="form-grid">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="field"><label for="cur">Current password</label><input id="cur" name="current" type="password" autocomplete="current-password" required></div>
@@ -68,6 +70,6 @@
         <div><button class="btn btn-primary" type="submit">Change password</button></div>
         <p class="hint">Changing it signs you out on every other device.</p>
       </form>
-    </section>
+    </div></details>
   </div>
 {% endblock %}

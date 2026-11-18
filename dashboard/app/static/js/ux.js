@@ -273,6 +273,7 @@
   function filterLists(d) {
     var lists = d.querySelectorAll(".rows");
     for (var i = 0; i < lists.length; i++) (function (list) {
+      if (list.closest(".log-sec")) return;
       var rows = list.querySelectorAll(":scope > a.row, :scope > .row"); if (rows.length < 9 || list.getAttribute("data-f")) return;
       list.setAttribute("data-f", "1");
       var inp = el("input", "set-filter"); inp.type = "search"; inp.placeholder = "Filter " + rows.length + " items…"; inp.setAttribute("aria-label", "Filter the list");
@@ -325,7 +326,7 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
-    spy(); initSettings();
+    spy(); initSettings(); copyButtons(document); filterLists(document);
     var kz = document.querySelectorAll(".kpi b");
     for (var z = 0; z < kz.length; z++) if (kz[z].textContent.trim() === "0") { var kp = kz[z].closest(".kpi"); if (kp) kp.classList.add("is-zero"); }
     var ts = document.querySelectorAll("#toasts .toast"), i;

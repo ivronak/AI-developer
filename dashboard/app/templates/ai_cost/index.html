@@ -52,8 +52,9 @@
       {% else %}<p class="hint">Nothing yet this month.</p>{% endif %}
     </section>
 
-    <section class="card" id="limits" aria-labelledby="h-lim">
-      <h2 id="h-lim"><span class="h-ic" style="--h:35">{{ icon('grid') }}</span>By project this month · limits</h2>
+    <details class="card set" id="limits">
+      <summary class="set-sum"><span class="h-ic" style="--h:35">{{ icon('grid') }}</span><span class="set-t"><strong>Limits by project</strong><small>Optional monthly AI limit for each project</small></span><span class="pill pill-muted">{{ projects|length }} projects</span></summary>
+      <div class="set-body">
       <p class="hint">Optional monthly limit per project. At 80% you get an alert; at 100% developers can't start new Claude work there — only you can. Empty = no limit.</p>
       <div class="rows">
         {% for r in projects %}
@@ -71,10 +72,11 @@
           </div>
         {% endfor %}
       </div>
-    </section>
+    </div></details>
 
-    <section class="card" aria-labelledby="h-credit">
-      <h2 id="h-credit"><span class="h-ic" style="--h:150">{{ icon('coin') }}</span>Record balance / top-up</h2>
+    <details class="card set" id="credit">
+      <summary class="set-sum"><span class="h-ic" style="--h:150">{{ icon('coin') }}</span><span class="set-t"><strong>Record balance / top-up</strong><small>Type the Console balance after a top-up</small></span><span></span></summary>
+      <div class="set-body">
       <p class="hint">Anthropic doesn't tell other apps your balance, so type it here. Billing stays <strong>prepaid credit with auto-reload off</strong> — nothing is charged to a card on its own.</p>
       <form method="post" action="{{ url_for('ai_cost.add_credit') }}" class="form-grid">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -101,6 +103,6 @@
           <input id="low" name="low" inputmode="decimal" value="{{ '%.2f'|format(low) }}"><span class="hint">0 = no alert. You also get an alert if Anthropic ever refuses a request for low credit.</span></div>
         <div><button class="btn" type="submit">Save alert amount</button></div>
       </form>
-    </section>
+    </div></details>
   </div>
 {% endblock %}

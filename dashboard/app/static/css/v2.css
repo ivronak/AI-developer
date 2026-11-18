@@ -525,3 +525,29 @@ details.edit-form[open] > summary { border-bottom: 1px solid var(--line); backgr
 .copy-key.is-done { color: var(--ok); border-color: var(--ok); background: var(--ok-soft); }
 .facts { gap: 0; background: var(--surface-2); overflow: hidden; }
 .facts > div { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 0 -1px -1px 0; }
+
+/* =====================================================================
+   Round 5: the Settings patterns, everywhere (project settings tab, account, AI cost, forms in any card)
+   ===================================================================== */
+.tab-panel[data-panel="settings"], form.set-grid { display: grid; gap: 10px; align-content: start; }
+.tab-panel[data-panel="settings"] > .btn-primary { justify-self: start; }
+form.set-grid > div:last-child { padding-top: 4px; }
+
+/* the same quiet label / hint / footer / danger rules for forms in any card or panel */
+.card .field > label, .panel-box .field > label { font-size: 13.5px; font-weight: 600; }
+.card .field > label .hint, .panel-box .field > label .hint { display: block; margin: 2px 0 0; font-size: 12.5px; font-weight: 400; color: var(--muted); }
+.card form.form-grid > .chip-row:last-child, .panel-box form.form-grid > .chip-row:last-child { padding-top: 14px; border-top: 1px solid var(--line); align-items: center; }
+.card .btn-danger, .panel-box .btn-danger { background: var(--surface); color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, var(--line)); }
+.card .btn-danger:hover, .panel-box .btn-danger:hover { background: var(--bad-soft); border-color: var(--bad); filter: none; }
+.card .field input, .card .field select { min-height: 42px; }
+
+/* Live environment: a living dot that says whether the site is fine */
+.env-live .env-name::after { content: ""; width: 9px; height: 9px; margin-left: 4px; border-radius: 50%; background: var(--faint); }
+.env-live.lv-ok .env-name::after { background: var(--ok); animation: conn-pulse 2.6s ease-out infinite; }
+.env-live.lv-warn .env-name::after { background: var(--warn); }
+.env-live.lv-bad .env-name::after { background: var(--bad); animation: conn-pulse-bad 1.6s ease-out infinite; }
+@keyframes conn-pulse-bad { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--bad) 55%, transparent); } 70%, 100% { box-shadow: 0 0 0 8px transparent; } }
+
+/* sets inside masonry columns (AI cost) keep their spacing */
+.card-grid > details.set { margin-bottom: 14px; }
+form.set-grid { grid-template-columns: minmax(0, 1fr) !important; }

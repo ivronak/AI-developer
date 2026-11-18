@@ -78,7 +78,7 @@
     </article>
     {% endif %}
     {% if live %}
-    <article class="env env-live">
+    <article class="env env-live lv-{{ r.level }}">
       <div class="env-top"><span class="env-name"><span class="h-ic" style="--h:150">{{ icon('rocket') }}</span>Live</span>
         <a class="env-url mono" href="{{ live.url }}" target="_blank" rel="noopener">{{ live.url.replace("https://", "") }}</a>
         <span class="mono env-commit">{{ live.current_release or live.current_commit or "—" }}</span></div>
@@ -527,9 +527,11 @@
   {# ---------- Settings (F13) ---------- #}
   <section class="tab-panel" data-panel="settings" hidden>
     {% if owner %}
-    <form class="panel-box" method="post" action="{{ url_for('projects.save_details', project_id=p.id) }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <h2><span class="h-ic" style="--h:{{ hue(p) }}">{{ icon('activity') }}</span>Project details</h2>
+    <details class="card set" id="set-details">
+      <summary class="set-sum"><span class="h-ic" style="--h:{{ hue(p) }}">{{ icon('activity') }}</span><span class="set-t"><strong>Project details</strong><small>Name, client, addresses and the GitHub repo</small></span>{% if p.is_active %}<span class="pill pill-ok">Active</span>{% else %}<span class="pill pill-muted">Dormant</span>{% endif %}</summary>
+      <div class="set-body">
+<form method="post" action="{{ url_for('projects.save_details', project_id=p.id) }}" class="form-grid">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="form-row two">
         <div class="field"><label for="d-name">Project name</label><input id="d-name" name="name" value="{{ p.name }}" required></div>
         <div class="field"><label for="d-client">Client</label><input id="d-client" name="client" value="{{ '' if p.client_name == 'Not set yet' else p.client_name }}" required></div>
@@ -554,8 +556,10 @@
       <label class="check"><input type="checkbox" name="watch" value="1"{% if p.monitor_enabled %} checked{% endif %}> <span>Watch this site — check the live address every 5 minutes and alert on Telegram if it goes down or the home page changes</span></label>
       <div><button class="btn btn-primary" type="submit">Save details</button></div>
     </form>
-    <section class="panel-box" id="auto-beta">
-      <h2><span class="h-ic" style="--h:285">{{ icon('sync') }}</span>Automatic beta</h2>
+      </div></details>
+    <details class="card set" id="auto-beta">
+      <summary class="set-sum"><span class="h-ic" style="--h:285">{{ icon('sync') }}</span><span class="set-t"><strong>Automatic beta</strong><small>The test site the dashboard makes and runs for you</small></span>{% if beta and beta.managed %}<span class="pill pill-ok">Dashboard-managed</span>{% elif beta %}<span class="pill pill-muted">Manual beta</span>{% else %}<span class="pill pill-warn">No beta yet</span>{% endif %}</summary>
+      <div class="set-body">
       {% if beta and beta.managed %}
         <p>This project's beta is made and run by the dashboard: <a href="{{ beta.url }}" target="_blank" rel="noopener" class="mono">{{ beta.url.replace("https://", "") }}</a>{% if beta.db_name %} · database <span class="mono">{{ beta.db_name }}</span> (a copy of live){% endif %}.</p>
         {% if p.beta_recipe %}<details><summary class="hint">Steps Claude found to run this app (replayed on every beta deploy)</summary><pre class="job-out mono">{{ p.beta_recipe }}</pre></details>{% endif %}
@@ -575,10 +579,12 @@
           <button class="btn {{ '' if beta and beta.managed else 'btn-primary' }}" {% if busy %}type="button" data-soon="{{ busy }}"{% else %}type="submit"{% endif %}>{{ icon('sync') }}{{ "Rebuild beta automatically" if beta and beta.managed else "Create beta automatically" }}</button>
         </form>
       {% else %}<p class="hint">First set the <strong>live</strong> server and folder (and its database) in “Servers &amp; deploy” below — the beta is made as a copy of live.</p>{% endif %}
-    </section>
-    <form class="panel-box" id="project-memory" method="post" action="{{ url_for('projects.save_memory', project_id=p.id) }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <h2><span class="h-ic" style="--h:150">{{ icon('list') }}</span>Project memory <span class="hint">(Claude Code)</span></h2>
+    </div></details>
+    <details class="card set" id="set-memory">
+      <summary class="set-sum"><span class="h-ic" style="--h:150">{{ icon('list') }}</span><span class="set-t"><strong>Project memory</strong><small>What Claude Code remembers about this project</small></span><span></span></summary>
+      <div class="set-body">
+<form  id="project-memory" method="post" action="{{ url_for('projects.save_memory', project_id=p.id) }}" class="form-grid">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <p class="hint">Claude keeps what it learns about this project in md files inside the repo, so it doesn't start from zero in every chat. They are committed with each change.</p>
       <div class="seg" role="radiogroup" aria-label="Project memory">
         <label><input type="radio" name="mode" value="auto"{% if p.memory_mode != "files" %} checked{% endif %}><div><strong>Claude manages it</strong><span>Uses the md files the repo already has (CLAUDE.md, MEMORY.md, PRD…). If there are none, it makes CLAUDE.md and MEMORY.md in the first chat and keeps them up to date.</span></div></label>
@@ -590,10 +596,13 @@
       </div>
       <div><button class="btn btn-primary" type="submit">Save</button></div>
     </form>
+      </div></details>
     {% if beta and live %}
-    <form class="panel-box" id="deploy-settings" method="post" action="{{ url_for('projects.save_deploy', project_id=p.id) }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <h2><span class="h-ic" style="--h:215">{{ icon('upload') }}</span>Servers &amp; deploy</h2>
+    <details class="card set" id="set-deploy"{% if not (live and live.server and live.deploy_path) %} open{% endif %}>
+      <summary class="set-sum"><span class="h-ic" style="--h:215">{{ icon('upload') }}</span><span class="set-t"><strong>Servers &amp; deploy</strong><small>Where this project's live and beta sites run</small></span>{% if live and live.server and live.deploy_path %}<span class="pill pill-ok">Configured</span>{% else %}<span class="pill pill-warn">Needs setup</span>{% endif %}</summary>
+      <div class="set-body">
+<form  id="deploy-settings" method="post" action="{{ url_for('projects.save_deploy', project_id=p.id) }}" class="form-grid">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       {% if not servers %}<p class="hint">No server added yet — add one in <a href="{{ url_for('settings.index') }}#servers">Settings → Servers</a> first.</p>{% endif %}
       {% for e, label in [(beta, "Beta (test site)"), (live, "Live")] %}
         <p><strong>{{ label }}</strong></p>
@@ -620,12 +629,15 @@
         <span class="hint">Use test keys only here — a live key on beta moves real money.</span></div>
       <div><button class="btn btn-primary" type="submit">Save servers &amp; deploy</button></div>
     </form>
+      </div></details>
     {% endif %}
     {% endif %}
     {% if beta %}
     <form class="set-grid" method="post" action="{{ url_for('projects.save_settings', project_id=p.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <section class="panel-box"><h2><span class="h-ic" style="--h:199">{{ icon('send') }}</span>Messages from beta</h2>
+      <details class="card set" id="set-msg">
+      <summary class="set-sum"><span class="h-ic" style="--h:199">{{ icon('send') }}</span><span class="set-t"><strong>Messages from beta</strong><small>May the test site send real SMS, WhatsApp, email or push?</small></span>{% if beta.message_mode == "off" %}<span class="pill pill-ok">Off</span>{% elif beta.message_mode == "test" %}<span class="pill pill-accent">Test numbers only</span>{% else %}<span class="pill pill-warn">On</span>{% endif %}</summary>
+      <div class="set-body">
         <div class="seg" role="radiogroup" aria-label="Messages from beta">
           {% for val, t, sub, locked in [("off", "Off", "No SMS, WhatsApp, email or push leaves beta. Default.", False),
               ("test", "Test numbers only", "Every message goes only to the numbers below, never to real users.", False),
@@ -634,16 +646,20 @@
           {% endfor %}
         </div>
         <div class="field" id="tn-box"{% if beta.message_mode != "test" %} hidden{% endif %}><label for="tn">Test numbers / emails (one per line)</label><textarea id="tn" name="test_numbers">{{ beta.test_numbers }}</textarea></div>
-      </section>
-      <section class="panel-box"><h2><span class="h-ic" style="--h:160">{{ icon('db') }}</span>Payments on beta</h2>
+      </div></details>
+      <details class="card set" id="set-pay">
+      <summary class="set-sum"><span class="h-ic" style="--h:160">{{ icon('db') }}</span><span class="set-t"><strong>Payments on beta</strong><small>May the test site move real money?</small></span>{% if beta.payment_mode == "sandbox" %}<span class="pill pill-ok">Sandbox</span>{% else %}<span class="pill pill-warn">{{ beta.payment_mode|title }}</span>{% endif %}</summary>
+      <div class="set-body">
         <div class="seg" role="radiogroup" aria-label="Payments on beta">
           {% for val, t, sub, locked in [("sandbox", "Sandbox / test keys", "No real money ever moves on beta. Default.", False),
               ("live", "Live keys", "Real money. Use only for a short, planned check." if owner else "Only the owner can turn this on.", not owner)] %}
             <label><input type="radio" name="pay" value="{{ val }}"{% if beta.payment_mode == val %} checked{% endif %}{% if locked %} disabled{% endif %}><div><strong>{{ t }}</strong><span>{{ sub }}</span></div></label>
           {% endfor %}
         </div>
-      </section>
-      <section class="panel-box"><h2><span class="h-ic" style="--h:{{ hue(p) }}">{{ icon('github') }}</span>Project</h2>
+      </div></details>
+      <details class="card set" id="set-info">
+      <summary class="set-sum"><span class="h-ic" style="--h:{{ hue(p) }}">{{ icon('github') }}</span><span class="set-t"><strong>Project at a glance</strong><small>Repo, server and addresses</small></span><span></span></summary>
+      <div class="set-body">
         <dl class="kv">
           <dt>GitHub</dt><dd class="mono">{{ p.github_repo or "—" }}</dd>
           <dt>Server</dt><dd>{{ "cPanel" if p.host_type == "cpanel" else "VPS" }} · <span class="mono">{{ live.server_host if live and live.server_host else "—" }}</span></dd>
@@ -651,7 +667,7 @@
           <dt>Live</dt><dd class="mono">{{ live.url if live else "—" }} · branch {{ live.branch if live else "main" }}</dd>
           <dt>Developers</dt><dd>{% for u in devs %}{{ u.name }}{% if not u.is_active %} (off){% endif %}{% if not loop.last %}, {% endif %}{% else %}None{% endfor %}</dd>
         </dl>
-      </section>
+      </div></details>
       <div><button class="btn btn-primary" type="submit">Save settings</button></div>
     </form>
     {% endif %}
