@@ -327,6 +327,7 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     spy(); initSettings(); copyButtons(document); filterLists(document);
+    var cn = document.querySelectorAll(".tabs-sm .n"); for (var c = 0; c < cn.length; c++) if (cn[c].textContent.trim() !== "0") cn[c].classList.add("nz");
     var kz = document.querySelectorAll(".kpi b");
     for (var z = 0; z < kz.length; z++) if (kz[z].textContent.trim() === "0") { var kp = kz[z].closest(".kpi"); if (kp) kp.classList.add("is-zero"); }
     var ts = document.querySelectorAll("#toasts .toast"), i;

@@ -42,15 +42,19 @@
   <div class="panels">
     <section class="ov-card panel" aria-labelledby="h-health">
       <div class="ov-head"><h2 id="h-health"><span class="h-ic" style="--h:150">{{ icon('activity') }}</span>Health</h2><span class="hint">Checked {{ now|ago }}</span></div>
-      <div class="hbar" aria-hidden="true">
-        {% for k in ("bad", "warn", "ok") if counts[k] %}<span class="s-{{ k }}" style="width:{{ (counts[k] / (rows|length or 1) * 100)|round(2) }}%"></span>{% endfor %}
-      </div>
-      <div class="hcounts">
-        {% for k, label in (("ok", "Healthy"), ("warn", "Attention"), ("bad", "Down")) %}<div class="hcount s-{{ k }}"><b>{{ counts[k] }}</b><span>{{ label }}</span></div>{% endfor %}
+      {% set tot = rows|length or 1 %}{% set pb = (counts.bad / tot * 100)|round(1) %}{% set pw = (counts.warn / tot * 100)|round(1) %}
+      <div class="hring-wrap">
+        <div class="hring" role="img" aria-label="{{ counts.ok }} of {{ rows|length }} projects healthy" style="background:conic-gradient(var(--bad) 0 {{ pb }}%, var(--warn) {{ pb }}% {{ pb + pw }}%, var(--ok) {{ pb + pw }}% 100%)">
+          <div class="hring-c"><b>{{ (counts.ok / tot * 100)|round|int }}%</b><span>healthy</span></div></div>
+        <ul class="hlegend">
+          {% for k, label in (("ok", "Healthy"), ("warn", "Attention"), ("bad", "Down")) %}<li class="s-{{ k }}"><span class="ldot s-{{ k }}"></span><span class="hl-l">{{ label }}</span><b>{{ counts[k] }}</b></li>{% endfor %}
+        </ul>
       </div>
       <ul class="att-list panel-scroll">
         {% for r in rows if r.level != "ok" %}
-          <li><a class="s-{{ r.level }}" href="{{ url_for('projects.detail', project_id=r.p.id) }}" title="{{ r.reason }}"><span class="ldot s-{{ r.level }}"></span><strong>{{ r.p.name }}</strong><span class="r">{{ r.reason }}</span></a></li>
+          <li><a class="s-{{ r.level }}" href="{{ url_for('projects.detail', project_id=r.p.id) }}" title="{{ r.reason }}"><span class="pav xs" style="--h:{{ hue(r.p) }}">{{ initials(r.p.name) }}</span><span class="att-t"><strong>{{ r.p.name }}</strong><span class="r">{{ r.reason }}</span></span><span class="att-go" aria-hidden="true">→</span></a></li>
+        {% else %}
+          <li class="att-ok">{{ icon('check') }}<span><strong>All clear</strong><small>Every project is healthy right now.</small></span></li>
         {% endfor %}
       </ul>
     </section>
@@ -97,7 +101,7 @@
             {% endif %}
           </li>
         {% else %}
-          <li class="mini-empty">No approvals pending.</li>
+          <li class="mini-empty"><strong>No approvals pending.</strong><small>When a client is asked to approve a change, it shows up here.</small></li>
         {% endfor %}
       </ul>
       <ul class="appr-list panel-scroll" data-appr-list="ready" hidden>
@@ -110,7 +114,7 @@
             <div class="appr-acts"><a class="btn btn-primary" href="{{ url_for('projects.detail', project_id=c.project_id) }}">{{ icon('rocket') }}Go Live…</a></div>
           </li>
         {% else %}
-          <li class="mini-empty">Nothing approved and waiting to go live.</li>
+          <li class="mini-empty"><strong>Nothing approved and waiting to go live.</strong><small>Approved changes wait here for your Go Live.</small></li>
         {% endfor %}
       </ul>
     </section>

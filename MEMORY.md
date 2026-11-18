@@ -468,3 +468,5 @@ Big picture lives in `TRACKER.md` (status, decisions) and `CHANGES.md` (the "zer
 - 2026-11-18 · Settings patterns rolled out (UI only): project Settings tab = 7 collapsible rows with status pills (Servers & deploy opens itself when not configured; form ids kept for project.js), Account + AI cost use the same rows, Live environment has a living status dot, Rollback quiet, copy button + filter box on any page, label/footer/danger/meta rules for all card forms. 524 checks.
 
 - 2026-11-18 · Fix (CSS only): checkbox rows inside .field (project memory file picker) were stacked by my label rule — now one line; memory picker is a tidy 3-column grid with ticked files highlighted. 524 checks.
+
+- 2026-11-18 · Projects overview v2 (UI only): Health = donut ring + legend + clickable attention rows (or "All clear"), Activity = quiet timeline with sticky days + fade, Approvals = project-coloured cards + friendlier empty state, filter bar = segmented control with coloured counts, project cards in 3 columns with status dot on the avatar. 524 checks.
