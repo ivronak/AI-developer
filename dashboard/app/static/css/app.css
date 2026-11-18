@@ -46,7 +46,7 @@
 .me-txt span { color: var(--muted); font-size: 11.5px; }
 .avatar {
   width: 30px; height: 30px; border-radius: 50%; flex: none; display: grid; place-items: center;
-  background: linear-gradient(135deg, #3ecf73, #4f46e5); color: #ffffff; font-size: 11px; font-weight: 700;
+  background: var(--fg); color: var(--bg); font-size: 11px; font-weight: 700;
 }
 
 /* Tooltips for icon-only controls (desktop pointer only) */

@@ -117,3 +117,13 @@ Not done yet (ideas): typed confirmation on Go Live (needs markup in the dialog)
 
 ## 11. Motion study from real products (2026-11-18)
 Mobbin returns stills only, so the CSS of vercel.com, linear.app, stripe.com, railway.com and notion.com was downloaded with Playwright and its transition / animation values counted. Result: micro-interactions 120–200 ms (Linear .12/.16 s, Vercel .15/.2 s, Notion 150 ms), richer components 300 ms (Stripe), easings are ease-out first, then expo/quart-out `cubic-bezier(.16,1,.3,1)` / `(.25,1,.5,1)` and the drawer curve `cubic-bezier(.32,.72,0,1)` (Vercel, Linear). Applied: `--ease-drawer`, `--ease-expo`, 340 ms `::details-content` open/close, 120–180 ms hovers.
+
+## 12. Professional skin v3 (2026-11-18) — the visual system
+Research: Linear's UI redesign write-up (LCH colour, fewer variables, reduce chrome, alignment, contrast), Vercel Geist colour scale (one background, grey scale roles, borders drawn once, translucent shadows), Refactoring UI (grayscale first, constrained spacing/type scale, borders and shadows sparingly), Mobbin (Linear, Plain, Clerk, Cloudflare, Supabase, Evernote, Base44: grey frame, inset white panel, hairline borders, compact 13–14 px type, colour only for status).
+System (static/css/tokens.css + v3.css, loaded last):
+- Grayscale first; colour only for meaning (ok / warn / bad / link). One accent = ink (near-black): primary buttons, selection, active tab underline.
+- Grey frame + sidebar on the frame, ONE inset white panel for content (desktop). Phones stay full-bleed.
+- Per-project hues are neutralised (saturation 6–12 %); avatars are soft grey tints; icon tiles, chips, tech tags are neutral.
+- Radii 6 / 8 / 12, 1 px borders, no card shadows (shadow only on floating layers), compact controls (34–36 px), 14 px base type, tabular numbers.
+- KPIs are one bordered strip (label over number, no icon tiles); tabs are underline tabs; status = dot + label, soft pills for problems.
+Revert: remove the v3 `<link>` in base.html (and the token block in tokens.css via git).

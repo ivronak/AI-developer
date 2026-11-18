@@ -1,9 +1,6 @@
 .login-page {
   min-height: 100vh;
-  background:
-    radial-gradient(circle at 12% 18%, hsl(262 var(--tint-s) var(--tint-l)) 0, transparent 38%),
-    radial-gradient(circle at 88% 82%, hsl(199 var(--tint-s) var(--tint-l)) 0, transparent 40%),
-    radial-gradient(circle at 80% 10%, hsl(320 var(--band-s) var(--band-l)) 0, transparent 30%);
+  background: var(--bg);
   display: grid; place-items: center;
   padding-inline: 16px; padding-block: 32px;
 }
@@ -21,7 +18,7 @@
 
 .login-card {
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
-  padding: 24px 20px; box-shadow: var(--shadow-pop); border-top: 3px solid var(--accent);
+  padding: 24px 20px; box-shadow: var(--shadow-pop);
   display: grid; gap: 18px;
 }
 .login-card h1 { font-size: 22px; }
