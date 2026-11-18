@@ -480,3 +480,48 @@ details.set[open] > .set-sum { background: var(--surface-2); border-bottom: 1px 
 .note-row > .pc-now.wrap.s-ok:hover { background: color-mix(in srgb, var(--ok-soft) 70%, var(--ok)); }
 .set-body form.form-row.two, .set-pane form.form-row.two { align-items: end; }
 .set-body form.form-row.two .btn, .set-pane form.form-row.two .btn { min-height: 42px; }
+
+/* =====================================================================
+   Settings round 4: state first. A connection shows what it is (status, facts, actions);
+   editing is one click away. Smooth open / close like the best dashboards (expo-out / drawer curves).
+   ===================================================================== */
+:root { --ease-drawer: cubic-bezier(.32, .72, 0, 1); --ease-expo: cubic-bezier(.16, 1, .3, 1); interpolate-size: allow-keywords; }
+details.set::details-content, details.edit-form::details-content { block-size: 0; overflow: hidden; transition: block-size .34s var(--ease-drawer), content-visibility .34s allow-discrete; }
+details.set[open]::details-content, details.edit-form[open]::details-content { block-size: auto; }
+
+.conn { border: 1px solid var(--line); border-radius: 16px; background: var(--surface); overflow: hidden; box-shadow: var(--shadow); }
+.conn-head { display: flex; align-items: center; gap: 14px; padding: 16px 18px; flex-wrap: wrap; }
+.conn-dot { flex: none; width: 12px; height: 12px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px var(--ok-soft); }
+.conn.is-ok .conn-dot { animation: conn-pulse 2.6s ease-out infinite; }
+@keyframes conn-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 45%, transparent); } 70%, 100% { box-shadow: 0 0 0 8px transparent; } }
+.conn.is-off .conn-dot { background: var(--warn); box-shadow: 0 0 0 4px var(--warn-soft); }
+.conn-t { flex: 1 1 260px; min-width: 0; display: grid; gap: 3px; }
+.conn-t strong { font-size: 15.5px; font-weight: 600; letter-spacing: -.01em; }
+.conn-t span { font-size: 13px; line-height: 1.5; color: var(--muted); max-width: 64ch; }
+.conn-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.conn-acts .btn { min-height: 36px; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1px; margin: 0; background: var(--line); border-top: 1px solid var(--line); }
+.facts > div { padding: 13px 18px 14px; background: var(--surface-2); min-width: 0; }
+.facts dt { font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); }
+.facts dd { margin: 5px 0 0; font-size: 15px; font-weight: 600; color: var(--fg); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.facts dd.mono { font-family: var(--font-mono); font-size: 14px; letter-spacing: .02em; }
+.facts dd small { display: block; margin-top: 2px; font-size: 12.5px; font-weight: 400; color: var(--muted); }
+
+details.edit-form { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden; }
+details.edit-form > summary { display: flex; align-items: center; gap: 10px; padding: 13px 16px; cursor: pointer; list-style: none; font-size: 14px; font-weight: 600; color: var(--accent); user-select: none; transition: background var(--dur-fast); }
+details.edit-form > summary::-webkit-details-marker { display: none; }
+details.edit-form > summary::before { content: ""; width: 16px; height: 16px; flex: none; background: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 6l6 6-6 6'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 6l6 6-6 6'/%3E%3C/svg%3E") center / contain no-repeat; transition: transform var(--dur-base) var(--ease-drawer); }
+details.edit-form[open] > summary::before { transform: rotate(90deg); }
+details.edit-form > summary:hover { background: var(--surface-2); }
+details.edit-form > summary:focus-visible { outline: none; box-shadow: inset var(--focus); }
+details.edit-form.about > summary { color: var(--muted); font-weight: 500; }
+details.edit-form[open] > summary { border-bottom: 1px solid var(--line); background: var(--surface-2); }
+.edit-body { padding: 16px; display: grid; gap: 14px; }
+.edit-body > form.form-grid { padding: 0; border: 0; background: none; }
+.edit-body > .hint { font-size: 13.5px; line-height: 1.6; max-width: 70ch; }
+
+.copy-key { justify-self: start; display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface); font-size: 13px; font-weight: 600; cursor: pointer; transition: background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast); }
+.copy-key:hover { background: var(--surface-2); }
+.copy-key.is-done { color: var(--ok); border-color: var(--ok); background: var(--ok-soft); }
+.facts { gap: 0; background: var(--surface-2); overflow: hidden; }
+.facts > div { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 0 -1px -1px 0; }

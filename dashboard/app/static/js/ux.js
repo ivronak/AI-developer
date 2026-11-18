@@ -283,6 +283,20 @@
       list.parentNode.insertBefore(inp, list);
     })(lists[i]);
   }
+  /* a one-click copy button under read-only keys */
+  function copyButtons(d) {
+    var tas = d.querySelectorAll("textarea[readonly]");
+    for (var i = 0; i < tas.length; i++) (function (ta) {
+      if (ta.getAttribute("data-copy")) return; ta.setAttribute("data-copy", "1");
+      var b = el("button", "copy-key", "Copy"); b.type = "button";
+      b.addEventListener("click", function () {
+        function done() { b.textContent = "Copied ✓"; b.classList.add("is-done"); setTimeout(function () { b.textContent = "Copy"; b.classList.remove("is-done"); }, 1800); }
+        if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(ta.value).then(done);
+        else { ta.select(); try { document.execCommand("copy"); done(); } catch (e) {} }
+      });
+      ta.parentNode.insertBefore(b, ta.nextSibling);
+    })(tas[i]);
+  }
   function initSettings() {
     var sets = document.querySelectorAll("details.set"); if (!sets.length) return;
     var saved = [], i;
@@ -290,7 +304,7 @@
     function store() { var ids = []; for (var k = 0; k < sets.length; k++) if (sets[k].open) ids.push(sets[k].id); try { sessionStorage.setItem("set-open", JSON.stringify(ids)); } catch (e) {} }
     for (i = 0; i < sets.length; i++) (function (d) {
       if (saved.indexOf(d.id) > -1) d.open = true;
-      tabsFor(d); filterLists(d);
+      tabsFor(d); filterLists(d); copyButtons(d);
       d.addEventListener("toggle", function () { store(); if (d.open) clampIn(d); });
       if (d.open) clampIn(d);
     })(sets[i]);

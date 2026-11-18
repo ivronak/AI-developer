@@ -37,8 +37,25 @@
     <details class="card set" id="github">
       <summary class="set-sum"><span class="h-ic" style="--h:245">{{ icon('github') }}</span><span class="set-t"><strong>GitHub</strong><small>Where your projects come from</small></span>{% if gh_token_mask %}<span class="pill pill-ok">Connected</span>{% else %}<span class="pill pill-warn">Not set up</span>{% endif %}</summary>
       <div class="set-body">
-      <p class="hint"><strong>Only repos owned by this account / organization appear.</strong> A repo that belongs to another person's GitHub account (you're only a collaborator there) can't be read with this token — ask its owner to <em>Transfer ownership</em> to this account (they stay a collaborator), or move all repos into a GitHub organization. A renamed or transferred repo stays the same project here.</p>
-      <p class="hint">Every repo of this account / organization is a project here. A new repo shows up as a project automatically (every 5 minutes on the server, or with “Sync now”).</p>
+      <div class="conn {{ 'is-ok' if gh_token_mask else 'is-off' }}">
+        <div class="conn-head"><span class="conn-dot" aria-hidden="true"></span>
+          <div class="conn-t"><strong>{{ "Connected to GitHub" if gh_token_mask else "Not connected yet" }}</strong><span>{% if gh_token_mask %}Every repo of this account becomes a project here — new ones appear within 5 minutes, or press Sync now.{% else %}Add an access token below to bring your repos in as projects.{% endif %}</span></div>
+          {% if gh_token_mask %}<div class="conn-acts">
+            <form method="post" action="{{ url_for('settings.test_github') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm" type="submit">Test connection</button></form>
+            <form method="post" action="{{ url_for('settings.sync_now') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-primary" type="submit">{{ icon('sync') }}Sync now</button></form>
+          </div>{% endif %}
+        </div>
+        {% set ghx = expiries[0] %}
+        {% if gh_token_mask %}<dl class="facts">
+          <div><dt>Account</dt><dd>{{ gh_owner or "—" }}<small>{{ "Organization" if gh_type == "org" else "Personal account" }}</small></dd></div>
+          <div><dt>Token</dt><dd class="mono">{{ gh_token_mask }}</dd></div>
+          <div><dt>Expires</dt><dd>{% if ghx[1] %}{{ ghx[1].strftime("%-d %b %Y") }}<small>Telegram reminder 7 days and 1 day before</small>{% else %}Not set{% endif %}</dd></div>
+          <div><dt>Last sync</dt><dd>{{ gh_last[:16].replace("T", " ") ~ " UTC" if gh_last else "Never" }}{% if gh_result %}<small>{{ gh_result }}</small>{% endif %}</dd></div>
+        </dl>{% endif %}
+      </div>
+      <details class="edit-form"{% if not gh_token_mask %} open{% endif %}>
+        <summary>{{ "Change account or token" if gh_token_mask else "Connect GitHub" }}</summary>
+        <div class="edit-body">
       <form method="post" action="{{ url_for('settings.save_github') }}" class="form-grid">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="form-row two">
@@ -56,15 +73,15 @@
         {% if gh_token_mask %}<label class="check"><input type="checkbox" name="clear_token" value="1"> <span>Remove the saved token</span></label>{% endif %}
         <div class="chip-row"><button class="btn btn-primary" type="submit">Save</button></div>
       </form>
-      {% set ghx = expiries[0] %}
-      {% if ghx[1] %}<p class="hint">Token expires on <strong>{{ ghx[1].strftime("%-d %b %Y") }}</strong> (read from GitHub) — Telegram reminder 7 days and 1 day before.</p>{% endif %}
-      <div class="switch-row">
-        <p class="hint meta">Last sync: <strong>{{ gh_last[:16].replace("T", " ") ~ " UTC" if gh_last else "never" }}</strong>{% if gh_result %} · {{ gh_result }}{% endif %}</p>
-        <div class="chip-row">
-          <form method="post" action="{{ url_for('settings.test_github') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm" type="submit">Test connection</button></form>
-          <form method="post" action="{{ url_for('settings.sync_now') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-primary" type="submit">{{ icon('sync') }}Sync now</button></form>
         </div>
-      </div>
+      </details>
+      <details class="edit-form about">
+        <summary>How this works</summary>
+        <div class="edit-body">
+          <p class="hint"><strong>Only repos owned by this account / organization appear.</strong> A repo that belongs to another person's GitHub account (you're only a collaborator there) can't be read with this token — ask its owner to <em>Transfer ownership</em> to this account (they stay a collaborator), or move all repos into a GitHub organization. A renamed or transferred repo stays the same project here.</p>
+          <p class="hint">Every repo of this account / organization is a project here. A new repo shows up as a project automatically (every 5 minutes on the server, or with “Sync now”).</p>
+        </div>
+      </details>
     </div></details>
 
     <details class="card set" id="new-repos">
@@ -91,8 +108,21 @@
     <details class="card set" id="claude">
       <summary class="set-sum"><span class="h-ic" style="--h:265">{{ icon('activity') }}</span><span class="set-t"><strong>Claude API key</strong><small>Key for projects that run on the Claude API</small></span>{% if ai_key_mask %}<span class="pill pill-ok">Key saved</span>{% else %}<span class="pill pill-muted">No key</span>{% endif %}</summary>
       <div class="set-body">
-      <p class="hint">The chat on each project sends the request to Claude with this API key. Claude works only on the change's own branch, runs the tests and pushes the branch — it can't deploy or reach any server.</p>
-      <p class="hint meta">Spent this month: <strong>${{ "%.2f"|format(month_cost) }}</strong></p>
+      <div class="conn {{ 'is-ok' if ai_key_mask else 'is-off' }}">
+        <div class="conn-head"><span class="conn-dot" aria-hidden="true"></span>
+          <div class="conn-t"><strong>{{ "API key saved" if ai_key_mask else "No API key yet" }}</strong><span>Used when a project runs on the Claude API. Claude works only on the change's own branch, runs the tests and pushes the branch — it can't deploy or reach any server.</span></div>
+        </div>
+        <dl class="facts">
+          <div><dt>Key</dt><dd class="mono">{{ ai_key_mask or "—" }}</dd></div>
+          <div><dt>Expires</dt><dd>{{ ai_key_expires or "Not set" }}</dd></div>
+          <div><dt>Spent this month</dt><dd>${{ "%.2f"|format(month_cost) }}</dd></div>
+          <div><dt>Default in the chat</dt><dd>{{ PRESETS[ai_preset][0] if ai_preset in PRESETS else ai_preset }}</dd></div>
+          <div><dt>One run stops at</dt><dd>${{ ai_max_usd }}<small>or {{ ai_max_turns }} steps</small></dd></div>
+        </dl>
+      </div>
+      <details class="edit-form"{% if not ai_key_mask %} open{% endif %}>
+        <summary>{{ "Change key or limits" if ai_key_mask else "Add your Anthropic API key" }}</summary>
+        <div class="edit-body">
       <form method="post" action="{{ url_for('settings.save_claude') }}" class="form-grid">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="field"><label for="ai-key">Anthropic API key {% if ai_key_mask %}<span class="hint">(saved: <span class="mono">{{ ai_key_mask }}</span> — leave empty to keep it)</span>{% endif %}</label>
@@ -108,8 +138,10 @@
           <div class="field"><label for="ai-usd">Stop one run at (US$)</label><input id="ai-usd" name="max_usd" type="number" min="0.5" max="50" step="0.5" value="{{ ai_max_usd }}"></div>
           <div class="field"><label for="ai-turns">Stop one run after (steps)</label><input id="ai-turns" name="max_turns" type="number" min="5" max="150" value="{{ ai_max_turns }}"></div>
         </div>
-        <div><button class="btn btn-primary" type="submit">Save</button></div>
+        <div class="chip-row"><button class="btn btn-primary" type="submit">Save</button></div>
       </form>
+        </div>
+      </details>
     </div></details>
 
     <details class="card set" id="claude-code">
@@ -219,12 +251,19 @@
     <details class="card set" id="codemagic">
       <summary class="set-sum"><span class="h-ic" style="--h:150">{{ icon('upload') }}</span><span class="set-t"><strong>Codemagic</strong><small>Builds test apps for mobile projects</small></span>{% if cm_token_mask %}<span class="pill pill-ok">Connected</span>{% else %}<span class="pill pill-muted">Optional</span>{% endif %}</summary>
       <div class="set-body">
-      <p class="hint">Builds Android test apps (APK) of a project's Flutter apps, pointed at the <strong>beta</strong> — never at live. The download link and a QR code appear on the project page.</p>
-      <ol class="summary-list">
-        <li>Sign up at codemagic.io with GitHub and add the project's repo (Add application → GitHub).</li>
-        <li>Codemagic → Account settings → <strong>API token</strong> → Show, copy it.</li>
-        <li>Paste it below (stored encrypted, never shown again), then press <strong>Test Codemagic</strong>.</li>
-      </ol>
+      <div class="conn {{ 'is-ok' if cm_token_mask else 'is-off' }}">
+        <div class="conn-head"><span class="conn-dot" aria-hidden="true"></span>
+          <div class="conn-t"><strong>{{ "Connected to Codemagic" if cm_token_mask else "Not connected (optional)" }}</strong><span>Builds Android test apps (APK) of a project's Flutter apps, pointed at the beta — never at live. The download link and a QR code appear on the project page.</span></div>
+          {% if cm_token_mask %}<div class="conn-acts"><form method="post" action="{{ url_for('settings.test_codemagic') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-primary" type="submit">Test Codemagic</button></form></div>{% endif %}
+        </div>
+        {% if cm_token_mask %}<dl class="facts">
+          <div><dt>Token</dt><dd class="mono">{{ cm_token_mask }}</dd></div>
+          <div><dt>Last test</dt><dd>{{ cm_last or "Never" }}</dd></div>
+        </dl>{% endif %}
+      </div>
+      <details class="edit-form"{% if not cm_token_mask %} open{% endif %}>
+        <summary>{{ "Change or remove the token" if cm_token_mask else "Connect Codemagic" }}</summary>
+        <div class="edit-body">
       <form method="post" action="{{ url_for('settings.save_codemagic') }}" class="form-grid">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="field"><label for="cm-token">Codemagic API token {% if cm_token_mask %}<span class="hint">(saved: <span class="mono">{{ cm_token_mask }}</span> — leave empty to keep it)</span>{% endif %}</label>
@@ -232,21 +271,36 @@
         <div class="chip-row"><button class="btn btn-primary" type="submit">Save</button>
           {% if cm_token_mask %}<button class="btn btn-danger" type="submit" name="clear" value="1">Remove token</button>{% endif %}</div>
       </form>
-      <div class="switch-row">
-        <p class="hint meta">Last test: <strong>{{ cm_last or "never" }}</strong></p>
-        <form method="post" action="{{ url_for('settings.test_codemagic') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm" type="submit">Test Codemagic</button></form>
-      </div>
+        </div>
+      </details>
+      <details class="edit-form about"{% if not cm_token_mask %} open{% endif %}>
+        <summary>How to get the token</summary>
+        <div class="edit-body">
+      <ol class="summary-list">
+        <li>Sign up at codemagic.io with GitHub and add the project's repo (Add application → GitHub).</li>
+        <li>Codemagic → Account settings → <strong>API token</strong> → Show, copy it.</li>
+        <li>Paste it in the form above (stored encrypted, never shown again), then press <strong>Test Codemagic</strong>.</li>
+      </ol>
+        </div>
+      </details>
     </div></details>
 
     <details class="card set" id="telegram">
       <summary class="set-sum"><span class="h-ic" style="--h:199">{{ icon('send') }}</span><span class="set-t"><strong>Telegram alerts</strong><small>Alerts straight to your phone</small></span>{% if tg_token_mask and tg_chats %}<span class="pill pill-ok">Connected</span>{% elif tg_token_mask %}<span class="pill pill-warn">Link your chat</span>{% else %}<span class="pill pill-warn">Not set up</span>{% endif %}</summary>
       <div class="set-body">
-      <p class="hint">Site down, home page changed, sign-in locked, backup failed — straight to your phone.</p>
-      <ol class="summary-list">
-        <li class="{{ 'done-step' if tg_token_mask }}"><strong>Bot token</strong> — from @BotFather in Telegram.{% if tg_token_mask %} Saved: <span class="mono">{{ tg_token_mask }}</span>{% endif %}</li>
-        <li class="{{ 'done-step' if tg_chats }}"><strong>Connect your chat</strong> — send the bot a one-time code.</li>
-        <li><strong>Send a test alert.</strong></li>
-      </ol>
+      <div class="conn {{ 'is-ok' if (tg_token_mask and tg_chats) else 'is-off' }}">
+        <div class="conn-head"><span class="conn-dot" aria-hidden="true"></span>
+          <div class="conn-t"><strong>{% if tg_token_mask and tg_chats %}Alerts reach your phone{% elif tg_token_mask %}Bot saved — link your chat{% else %}Not set up yet{% endif %}</strong><span>Site down, home page changed, sign-in locked, backup failed — straight to your phone.</span></div>
+          {% if tg_token_mask and tg_chats %}<div class="conn-acts"><form method="post" action="{{ url_for('settings.telegram_test') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-primary" type="submit">{{ icon('bell') }}Send a test alert</button></form></div>{% endif %}
+        </div>
+        <dl class="facts">
+          <div><dt>Bot token</dt><dd class="mono">{{ tg_token_mask or "—" }}</dd></div>
+          <div><dt>Chats</dt><dd>{% if tg_chats %}{{ tg_chats|length }}<small>{% for c in tg_chats %}{{ c.name }}{{ ", " if not loop.last }}{% endfor %}</small>{% else %}None yet{% endif %}</dd></div>
+        </dl>
+      </div>
+      <details class="edit-form"{% if not tg_token_mask %} open{% endif %}>
+        <summary>{{ "Change or remove the bot" if tg_token_mask else "Add your bot token" }}</summary>
+        <div class="edit-body">
       <form method="post" action="{{ url_for('settings.save_telegram') }}" class="form-grid">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="field"><label for="tg-token">Bot token {% if tg_token_mask %}<span class="hint">(leave empty to keep it)</span>{% endif %}</label>
@@ -254,6 +308,8 @@
         <div class="chip-row"><button class="btn btn-primary" type="submit">Save bot</button>
           {% if tg_token_mask %}<button class="btn btn-danger" type="submit" name="clear_token" value="1">Remove bot</button>{% endif %}</div>
       </form>
+        </div>
+      </details>
       {% if tg_token_mask %}
         {% if tg_code %}
           <div class="linkbox">
@@ -271,9 +327,18 @@
                 <span class="row-side"><form method="post" action="{{ url_for('settings.telegram_remove', chat_id=c.id) }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm" type="submit">Remove</button></form></span></div>
             {% endfor %}
           </div>
-          <form method="post" action="{{ url_for('settings.telegram_test') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-primary" type="submit">{{ icon('bell') }}Send a test alert</button></form>
         {% endif %}
       {% endif %}
+      <details class="edit-form about"{% if not tg_chats %} open{% endif %}>
+        <summary>How to set it up</summary>
+        <div class="edit-body">
+      <ol class="summary-list">
+        <li class="{{ 'done-step' if tg_token_mask }}"><strong>Bot token</strong> — from @BotFather in Telegram.</li>
+        <li class="{{ 'done-step' if tg_chats }}"><strong>Connect your chat</strong> — send the bot a one-time code.</li>
+        <li><strong>Send a test alert.</strong></li>
+      </ol>
+        </div>
+      </details>
     </div></details>
 
     <h3 class="set-group">Servers &amp; sites</h3>

@@ -462,3 +462,5 @@ Big picture lives in `TRACKER.md` (status, decisions) and `CHANGES.md` (the "zer
 - 2026-11-18 · Settings round 2 (UI only): long sections become inner tabs (Claude Code: Accounts / Model / About; Servers: SSH key / Your servers / Add / About), 9+ item lists get a filter box and scroll inside, two-column account cards; spacing fixes (beta-domain forms inside server rows had no padding, Save button touched the edge). 524 checks.
 
 - 2026-11-18 · Settings round 3 (UI only): OK notices (code protection / root commands) become two small green chips with hover/focus details (problems still show in full); labels stack name over hint; select arrows fixed; form footers with divider; danger buttons outlined; fact lines as a quiet strip; Claude account cards tidied (no stray dot). 524 checks.
+
+- 2026-11-18 · Settings round 4 (UI only): state-first connection panels for GitHub / Claude API / Codemagic / Telegram (status dot with pulse, facts grid, actions on top, edit form + how-to in smooth-opening disclosures, open by default only when not connected), Copy button for the SSH key, motion study from real sites (docs plan §11). All forms/actions unchanged. 524 checks.
