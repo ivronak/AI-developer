@@ -149,7 +149,9 @@
     var root = document.documentElement, mq = window.matchMedia("(min-width: 1100px)");
     function get(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
     function put(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
-    var mode = get("apd.dock", "right"), w = parseInt(get("apd.dockw", "420"), 10) || 420;
+    var mode = get("apd.dock", "right"), storedW = get("apd.dockw", null);
+    function defW() { return Math.max(340, Math.min(460, Math.round(window.innerWidth * 0.3))); }
+    var w = storedW ? (parseInt(storedW, 10) || defW()) : defW();
     var ICON = {
       side: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>',
       wide: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>',
@@ -168,12 +170,30 @@
       var on = mq.matches && mode !== "off";
       root.classList.toggle("chat-docked", on); root.classList.toggle("dock-left", on && mode === "left");
       root.style.setProperty("--dock-w", w + "px"); fab.hidden = !(mq.matches && mode === "off");
+      var pref = get("apd.side", "0") === "1";
+      root.classList.toggle("side-collapsed", (on && window.innerWidth < 1500) || pref);
+      var comp = document.getElementById("composer");
+      if (comp && !comp.querySelector(".opts-tgl")) {
+        var plus = comp.querySelector(".plus-btn");
+        if (plus && plus.parentNode) {
+          var ob = el("button", "opts-tgl"); ob.type = "button"; ob.title = "Engine, account, model and effort"; ob.setAttribute("aria-label", "Chat options");
+          ob.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>';
+          ob.addEventListener("click", function () { comp.classList.toggle("opts-open"); });
+          plus.parentNode.insertBefore(ob, plus.nextSibling);
+        }
+      }
+      var heads = document.querySelectorAll(".ccard-head");
+      for (var hi = 0; hi < heads.length; hi++) if (!heads[hi].querySelector(".ccard-tgl")) {
+        var tg = el("button", "ccard-tgl"); tg.type = "button"; tg.setAttribute("aria-label", "Show or hide the change details"); tg.title = "Details";
+        tg.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+        heads[hi].appendChild(tg);
+      }
       if (on) { var cur = document.querySelector('[data-tab][aria-selected="true"]'); if (cur && cur.getAttribute("data-tab") === "chat") { var t = document.querySelector('[data-tab="changes"]'); if (t) t.click(); } }
     }
     bar.addEventListener("click", function (e) {
       var b = e.target.closest("[data-dock-act]"); if (!b) return; var act = b.getAttribute("data-dock-act");
       if (act === "side") { mode = mode === "left" ? "right" : "left"; put("apd.dock", mode); }
-      else if (act === "wide") { w = w < 520 ? 600 : 420; put("apd.dockw", String(w)); }
+      else if (act === "wide") { w = w < 520 ? 600 : defW(); put("apd.dockw", String(w)); }
       else if (act === "hide") { mode = "off"; put("apd.dock", mode); var c = document.querySelector('[data-tab="chat"]'); }
       apply();
       if (mode === "off") { var c2 = document.querySelector('[data-tab="chat"]'); if (c2) c2.click(); }
@@ -190,7 +210,8 @@
       handle.addEventListener("pointermove", move); handle.addEventListener("pointerup", up);
     });
     if (mq.addEventListener) mq.addEventListener("change", apply); else if (mq.addListener) mq.addListener(apply);
-    apply(); window.addEventListener("load", apply);
+    document.addEventListener("click", function (e) { var t = e.target.closest && e.target.closest(".ccard-tgl"); if (t) { var c = t.closest(".ccard"); if (c) c.classList.toggle("is-open"); } });
+    apply(); window.addEventListener("load", apply); window.addEventListener("resize", apply);
   }
 
   /* rails stay in view while the page scrolls (a tall rail sticks by its bottom edge, a short one by its top) */

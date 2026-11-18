@@ -463,3 +463,81 @@ details.needs[open] > .needs-head { border-bottom: 1px solid var(--line); }
   html.chat-docked .chat-scroll > [data-change] > .ccard { max-height: 250px; overflow-y: auto; }
   html.chat-docked .ccard-head h2 { font-size: 15px; }
 }
+
+/* =====================================================================
+   CHAT v3.4 — status moves into a slim strip, messages get the room, the middle gets more width
+   ===================================================================== */
+/* ---- messages: readable, calm (classic tab and dock) ---- */
+.thread { gap: 16px; }
+.thread .bubble { box-shadow: none; }
+.thread .bubble.b-claude { background: transparent; border: 0; padding: 2px 0 0; max-width: 100%; border-radius: 0; }
+.thread .bubble.b-claude .who { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.thread .bubble.b-claude .who::before { margin-right: 0; width: 7px; height: 7px; background: var(--hi); }
+.thread .bubble.b-claude time { display: none; }
+.thread .bubble.b-claude:hover time { display: block; }
+.thread .bubble.b-owner { background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px 14px 4px 14px; max-width: 88%; padding: 9px 13px; }
+.thread .bubble.b-owner .who { display: none; }
+.thread .bubble.b-owner time { font-size: 11px; color: var(--faint); }
+.thread .md { font-size: 14px; line-height: 1.65; gap: 10px; }
+.thread .md ul, .thread .md ol { gap: 5px; }
+.thread .md code { background: var(--surface-2); border: 1px solid var(--line); border-radius: 5px; padding: 0 5px; font-size: 12.5px; }
+.thread .md pre { background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; font-size: 12.5px; }
+.thread .msg-steps summary { display: inline-flex; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2); font-size: 11.5px; }
+
+@media (min-width: 1100px) {
+  /* ---- dock layout ---- */
+  html.chat-docked .chat-panel { background: var(--surface); }
+  html.chat-docked .chat-scroll { padding: 8px 0 0; gap: 0; }
+  html.chat-docked .chat-scroll > [data-change] { gap: 0; }
+  html.chat-docked .thread-box { background: transparent; border: 0; border-radius: 0; padding: 12px 14px 8px; }
+  html.chat-docked .chat-panel > .pick { padding: 8px 12px; }
+  html.chat-docked .chat-panel form.composer { margin: 6px 10px 10px; padding: 8px 10px 6px; border-radius: 12px; }
+  html.chat-docked .composer textarea { min-height: 40px; font-size: 14px; }
+  html.chat-docked .composer-bar { gap: 4px 8px; }
+  html.chat-docked .composer .chip-row { gap: 6px; }
+  html.chat-docked .composer .hint, html.chat-docked .composer .preset-pick, html.chat-docked .composer .cc-usage { font-size: 12px; }
+
+  /* the change card becomes a status strip: title, pill, slim stepper, the main buttons — the rest opens with the chevron */
+  html.chat-docked .chat-scroll > [data-change] > .ccard { display: flex; flex-direction: column; gap: 6px; max-height: none !important; overflow: visible !important; margin: 0 12px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); }
+  html.chat-docked .ccard-head { order: -2; display: flex; align-items: center; gap: 8px; }
+  html.chat-docked .ccard-head > div:first-child { min-width: 0; flex: 1; }
+  html.chat-docked .ccard-head h2 { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0; }
+  html.chat-docked .ccard-head p, html.chat-docked .ccard-head .muted { display: none; }
+  html.chat-docked .ccard.is-open .ccard-head p, html.chat-docked .ccard.is-open .ccard-head .muted { display: block; font-size: 12px; margin-top: 2px; white-space: normal; }
+  html.chat-docked .ccard-head h2 { white-space: nowrap; }
+  html.chat-docked .ccard.is-open .ccard-head h2 { white-space: normal; }
+  html.chat-docked .stepper { order: -1; }
+  html.chat-docked .stepper li { font-size: 10px; }
+  html.chat-docked .ccard-acts { order: 0; }
+  html.chat-docked .ccard > *:not(.ccard-head):not(.stepper):not(.ccard-acts):not(.ask-card):not(.agent-run):not(.client-said):not(.continue-form) { display: none; }
+  html.chat-docked .ccard.is-open > *:not(.ccard-head):not(.stepper):not(.ccard-acts) { display: revert; order: 1; }
+  .ccard-tgl { display: none; }
+  html.chat-docked .ccard-tgl { display: grid; place-items: center; flex: none; width: 24px; height: 24px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; transition: transform var(--dur-base) var(--ease-drawer), background var(--dur-fast); }
+  html.chat-docked .ccard-tgl:hover { background: color-mix(in srgb, var(--fg) 8%, transparent); }
+  html.chat-docked .ccard.is-open .ccard-tgl { transform: rotate(180deg); }
+  html.chat-docked .ccard-tgl svg { width: 16px; height: 16px; }
+  html.chat-docked .ask-card, html.chat-docked .agent-run, html.chat-docked .client-said { margin: 0; }
+
+  /* ---- the middle: tighter header, one-line environments ---- */
+  html.chat-docked .phead { padding: 10px 14px; gap: 8px 12px; }
+  html.chat-docked .phead .pav { width: 36px; height: 36px; font-size: 13px; }
+  html.chat-docked .phead-facts { margin: 4px -14px -10px; grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)); }
+  html.chat-docked .phead-facts > div { padding: 7px 12px 8px; }
+  html.chat-docked .phead-facts dd { font-size: 13px; margin-top: 1px; }
+  html.chat-docked .phead-facts dd small { display: none; }
+  html.chat-docked .crumbs-main { margin-bottom: -8px; }
+  html.chat-docked .p-body > .p-rail { grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 10px; }
+  html.chat-docked .env { padding: 8px 12px; gap: 2px; }
+  html.chat-docked .env .env-meta, html.chat-docked .env .env-login, html.chat-docked .env > .inline-form { display: none; }
+  html.chat-docked .live-drift { padding: 8px 12px; }
+}
+@media (min-width: 1100px) {
+  .opts-tgl { display: none; }
+  html.chat-docked .opts-tgl { display: inline-grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); cursor: pointer; transition: background var(--dur-fast), color var(--dur-fast); flex: none; }
+  html.chat-docked .opts-tgl:hover, html.chat-docked .composer.opts-open .opts-tgl { background: var(--surface-2); color: var(--fg); }
+  html.chat-docked .opts-tgl svg { width: 15px; height: 15px; }
+  html.chat-docked .composer:not(.opts-open) .chip-row > *:not(.plus-btn):not(.opts-tgl):not(#shots):not(#shot-names) { display: none !important; }
+  html.chat-docked .composer-bar { flex-wrap: nowrap; align-items: center; }
+  html.chat-docked .composer.opts-open .composer-bar { flex-wrap: wrap; }
+  html.chat-docked .composer.opts-open .chip-row { flex-wrap: wrap; row-gap: 6px; }
+}
