@@ -219,14 +219,69 @@
 
   /* settings: rows open on demand, the open ones are remembered, long intro text folds to two lines */
   function clampIn(d) {
-    var ps = d.querySelectorAll(".set-body > p.hint");
+    var ps = d.querySelectorAll(".set-body > p.hint, .set-pane > p.hint");
     for (var i = 0; i < ps.length; i++) (function (p) {
-      if (p.getAttribute("data-c")) return; p.setAttribute("data-c", "1"); p.classList.add("is-clamped");
+      if (p.getAttribute("data-c") || p.offsetParent === null) return; p.setAttribute("data-c", "1"); p.classList.add("is-clamped");
       if (p.scrollHeight <= p.clientHeight + 2) { p.classList.remove("is-clamped"); return; }
       var b = el("button", "more-btn", "Show more"); b.type = "button";
       b.addEventListener("click", function () { var c = p.classList.toggle("is-clamped"); b.textContent = c ? "Show more" : "Show less"; });
       p.parentNode.insertBefore(b, p.nextSibling);
     })(ps[i]);
+  }
+  /* a long section becomes tabs (one per sub-heading) so nothing needs a long scroll */
+  function tabsFor(d) {
+    var body = d.querySelector(".set-body"); if (!body || body.getAttribute("data-tabs")) return;
+    var kids = Array.prototype.slice.call(body.children), heads = 0, i;
+    for (i = 0; i < kids.length; i++) if (kids[i].tagName === "H3") heads++;
+    if (heads < 2) return;
+    body.setAttribute("data-tabs", "1");
+    var groups = [], cur = { title: "About", els: [], def: false, about: true };
+    for (i = 0; i < kids.length; i++) {
+      if (kids[i].tagName === "H3") { groups.push(cur); cur = { title: kids[i].textContent.trim(), els: [], def: kids[i].hasAttribute("data-default") }; kids[i].remove(); }
+      else cur.els.push(kids[i]);
+    }
+    groups.push(cur);
+    var useful = groups.filter(function (g) { return g.els.length; }), about = null, panes = [];
+    for (i = 0; i < useful.length; i++) { if (useful[i].about) about = useful[i]; else panes.push(useful[i]); }
+    if (about) panes.push(about);
+    if (panes.length < 2) return;
+    var bar = el("div", "set-tabs"); bar.setAttribute("role", "tablist");
+    var key = "set-tab-" + d.id, want = null, first = about ? 0 : 0, def = 0;
+    try { want = sessionStorage.getItem(key); } catch (e) {}
+    for (i = 0; i < panes.length; i++) if (panes[i].def) def = i;
+    var idx = def;
+    for (i = 0; i < panes.length; i++) if (want && panes[i].title === want) idx = i;
+    var btns = [], paneEls = [];
+    function show(n) {
+      for (var k = 0; k < panes.length; k++) { var on = k === n; btns[k].setAttribute("aria-selected", on ? "true" : "false"); paneEls[k].hidden = !on; }
+      try { sessionStorage.setItem(key, panes[n].title); } catch (e) {}
+      clampIn(d);
+    }
+    for (i = 0; i < panes.length; i++) (function (n) {
+      var b = el("button", "", panes[n].title); b.type = "button"; b.setAttribute("role", "tab");
+      b.addEventListener("click", function () { show(n); });
+      btns.push(b); bar.appendChild(b);
+      var pe = el("div", "set-pane"); pe.setAttribute("role", "tabpanel");
+      for (var m = 0; m < panes[n].els.length; m++) pe.appendChild(panes[n].els[m]);
+      paneEls.push(pe);
+    })(i);
+    body.insertBefore(bar, body.firstChild);
+    for (i = 0; i < paneEls.length; i++) body.appendChild(paneEls[i]);
+    show(idx);
+  }
+  /* long lists get a filter box */
+  function filterLists(d) {
+    var lists = d.querySelectorAll(".rows");
+    for (var i = 0; i < lists.length; i++) (function (list) {
+      var rows = list.querySelectorAll(":scope > a.row, :scope > .row"); if (rows.length < 9 || list.getAttribute("data-f")) return;
+      list.setAttribute("data-f", "1");
+      var inp = el("input", "set-filter"); inp.type = "search"; inp.placeholder = "Filter " + rows.length + " items…"; inp.setAttribute("aria-label", "Filter the list");
+      inp.addEventListener("input", function () {
+        var q = inp.value.trim().toLowerCase();
+        for (var r = 0; r < rows.length; r++) rows[r].hidden = !!q && rows[r].textContent.toLowerCase().indexOf(q) === -1;
+      });
+      list.parentNode.insertBefore(inp, list);
+    })(lists[i]);
   }
   function initSettings() {
     var sets = document.querySelectorAll("details.set"); if (!sets.length) return;
@@ -235,6 +290,7 @@
     function store() { var ids = []; for (var k = 0; k < sets.length; k++) if (sets[k].open) ids.push(sets[k].id); try { sessionStorage.setItem("set-open", JSON.stringify(ids)); } catch (e) {} }
     for (i = 0; i < sets.length; i++) (function (d) {
       if (saved.indexOf(d.id) > -1) d.open = true;
+      tabsFor(d); filterLists(d);
       d.addEventListener("toggle", function () { store(); if (d.open) clampIn(d); });
       if (d.open) clampIn(d);
     })(sets[i]);

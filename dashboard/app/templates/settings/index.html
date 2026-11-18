@@ -278,10 +278,12 @@
       <summary class="set-sum"><span class="h-ic" style="--h:215">{{ icon('db') }}</span><span class="set-t"><strong>Servers</strong><small>Where the beta and live sites run</small></span>{% if servers %}<span class="pill pill-ok">{{ servers|length }} server{{ "" if servers|length == 1 else "s" }}</span>{% else %}<span class="pill pill-warn">None added</span>{% endif %}</summary>
       <div class="set-body">
       <p class="hint">The servers your beta and live sites run on. The dashboard signs in with <strong>its own SSH key</strong> — no password is ever stored. Claude never gets this access; only the Beta deploy / Live → Beta sync buttons use it.</p>
+      <h3>SSH key</h3>
       {% if ssh_public_key %}
         <div class="field"><label for="srv-key">1 · Add this key on each server <span class="hint">(append it to <span class="mono">~/.ssh/authorized_keys</span> of the user below)</span></label>
           <textarea id="srv-key" class="mono" rows="3" readonly onclick="this.select()">{{ ssh_public_key }}</textarea></div>
       {% else %}<p class="hint">Could not create the dashboard's SSH key (ssh-keygen missing on this machine).</p>{% endif %}
+      <h3 data-default="1">Your servers</h3>
       {% if servers %}
         <div class="rows">
           {% for s in servers %}
@@ -302,6 +304,7 @@
           {% endfor %}
         </div>
       {% endif %}
+      <h3>Add a server</h3>
       <form method="post" action="{{ url_for('settings.server_add') }}" class="form-grid">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <p><strong>2 · Add a server</strong></p>
