@@ -295,3 +295,31 @@ a.pcard { display: flex; flex-direction: column; align-content: normal; position
   .kpi b { font-size: 20px; }
   .kpi span.l { font-size: 12px; }
 }
+
+/* =====================================================================
+   Round 2: chat bubbles, page title, sticky project tabs, quieter empty states
+   ===================================================================== */
+/* chat: light, readable bubbles (the old ones were solid indigo / lavender blocks) */
+.thread .bubble { max-width: min(640px, 88%); padding: 11px 15px; border-radius: 16px; font-size: 14.5px; line-height: 1.55; box-shadow: none; }
+.thread .bubble.b-owner { background: var(--accent-soft); color: var(--fg); border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent); border-bottom-right-radius: 5px; }
+.thread .bubble.b-owner .who { color: var(--accent); opacity: 1; }
+.thread .bubble.b-owner time { color: var(--muted); opacity: 1; }
+.thread .bubble.b-claude { background: var(--surface); border: 1px solid var(--line); border-bottom-left-radius: 5px; }
+.thread .bubble.b-claude .who { color: var(--fg); }
+.thread .bubble.b-claude .who::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: hsl(265 var(--solid-s) var(--solid-l)); }
+.chat-scroll .thread-box { background: var(--surface-2); }
+form.composer:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); border-color: var(--accent); }
+
+/* page title on the projects page */
+.ov-title { margin-bottom: -6px; }
+.ov-title h1 { font-size: 26px; letter-spacing: -.02em; }
+.ov-title .t-bad { color: var(--bad); font-weight: 600; }
+.ov-title .t-warn { color: var(--warn); font-weight: 600; }
+
+/* project tabs stay in reach while a long tab scrolls */
+@media (min-width: 900px) { #tabs { position: sticky; top: 8px; z-index: 12; box-shadow: var(--shadow-pop); } }
+@media (max-width: 899px) { #tabs { position: sticky; top: 68px; z-index: 12; box-shadow: var(--shadow-pop); } }
+
+/* empty panels: centred, with a quiet icon, instead of one lonely line at the top */
+.mini-empty { display: grid; justify-items: center; align-content: center; gap: 8px; min-height: 140px; text-align: center; color: var(--muted); }
+.mini-empty::before { content: ""; width: 36px; height: 36px; border-radius: 12px; background: var(--surface-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%23858585' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6L9 17l-5-5'/%3E%3C/svg%3E") center / 18px no-repeat; }

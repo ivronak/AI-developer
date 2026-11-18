@@ -3,6 +3,9 @@
 {% block scripts %}<script src="{{ url_for('static', filename='js/projects.js') }}" defer></script>{% endblock %}
 {% macro ago_of(dt) %}{{ dt|ago if dt else "Never" }}{% endmacro %}
 {% block content %}
+  {% set n_bad = rows|selectattr('level', 'equalto', 'bad')|list|length %}{% set n_warn = rows|selectattr('level', 'equalto', 'warn')|list|length %}
+  <div class="page-head ov-title"><h1>Projects</h1>
+    <p>{{ rows|length }} project{{ "s" if rows|length != 1 }}{% if n_bad %} · <span class="t-bad">{{ n_bad }} down</span>{% endif %}{% if n_warn %} · <span class="t-warn">{{ n_warn }} need attention</span>{% endif %}{% if not n_bad and not n_warn %} · all healthy{% endif %}</p></div>
   <div class="toolbar">
     <div class="search">
       {{ icon('search') }}
@@ -159,7 +162,7 @@
         {% for r in rows %}{% set p = r.p %}
           <a class="prow" href="{{ url_for('projects.detail', project_id=p.id) }}" style="--h:{{ hue(p) }}"
              data-item data-name="{{ (p.name ~ ' ' ~ p.client_name)|lower }}" data-level="{{ r.level }}" data-waiting="{{ r.waiting }}" data-open="{{ r.open }}" data-active="{{ 1 if p.is_active else 0 }}">
-            <span class="who"><span class="pav{% if not p.is_active %} off{% endif %}">{{ initials(p.name) }}</span><span class="nm"><strong>{{ p.name }}</strong><span>{{ p.client_name }} · {{ p.tech_stack|join(" + ") }}</span></span></span>
+            <span class="who"><span class="pav{% if not p.is_active %} off{% endif %}">{{ initials(p.name) }}</span><span class="nm"><strong>{{ p.name }}</strong><span>{{ p.client_name }}{% if p.tech_stack %} · {{ p.tech_stack|join(" + ") }}{% endif %}</span></span></span>
             <span class="col"><span class="st s-{{ r.level }}"><span class="ldot s-{{ r.level }}"></span>{{ r.label }}</span>{% if r.reason %}<span class="sub">{{ r.reason }}</span>{% endif %}</span>
             <span class="col col-hide"><span class="commit">{{ icon('branch') }}<span class="mono">{{ r.live.current_commit if r.live else "—" }}</span></span><span class="sub">{{ r.last_deploy.note if r.last_deploy else "" }}</span></span>
             {# HIDDEN until backups are worked on <span class="col col-hide"><span class="sub{% if r.backup_stale %} stale{% endif %}">{{ r.last_backup.created_at|ago if r.last_backup else "missing" }}</span></span> #}
