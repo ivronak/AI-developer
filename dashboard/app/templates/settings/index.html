@@ -25,12 +25,15 @@
       {% else %}Root commands are ready: Claude can ask to run a command as root — only after you read it and type a fresh authenticator code.{% endif %}
       <small>Every root command is logged on the server in <span class="mono">/var/log/aidash-rootd.log</span>. To switch it off: <span class="mono">systemctl disable --now aidash-rootd</span>.</small></span></div>
   {% endif %}
+  {% set cc_ok_n = (cc_accounts|selectattr("a.status", "equalto", "ok")|list|length) if cc_accounts else 0 %}
   <nav class="jump" aria-label="Jump to a section">
     <a href="#github">{{ icon('github') }}GitHub</a><a href="#claude">Claude API</a><a href="#claude-code">Claude Code</a><a href="#codemagic">Codemagic</a><a href="#telegram">Telegram</a><a href="#servers">Servers</a><a href="#monitor">Site monitor</a>
   </nav>
-  <div class="card-grid">
-    <section class="card" id="github" aria-labelledby="h-gh">
-      <h2 id="h-gh"><span class="h-ic" style="--h:245">{{ icon('github') }}</span>GitHub</h2>
+  <div class="card-grid set-list">
+    <h3 class="set-group">Projects</h3>
+    <details class="card set" id="github">
+      <summary class="set-sum"><span class="h-ic" style="--h:245">{{ icon('github') }}</span><span class="set-t"><strong>GitHub</strong><small>Where your projects come from</small></span>{% if gh_token_mask %}<span class="pill pill-ok">Connected</span>{% else %}<span class="pill pill-warn">Not set up</span>{% endif %}</summary>
+      <div class="set-body">
       <p class="hint"><strong>Only repos owned by this account / organization appear.</strong> A repo that belongs to another person's GitHub account (you're only a collaborator there) can't be read with this token — ask its owner to <em>Transfer ownership</em> to this account (they stay a collaborator), or move all repos into a GitHub organization. A renamed or transferred repo stays the same project here.</p>
       <p class="hint">Every repo of this account / organization is a project here. A new repo shows up as a project automatically (every 5 minutes on the server, or with “Sync now”).</p>
       <form method="post" action="{{ url_for('settings.save_github') }}" class="form-grid">
@@ -59,10 +62,11 @@
           <form method="post" action="{{ url_for('settings.sync_now') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-primary" type="submit">{{ icon('sync') }}Sync now</button></form>
         </div>
       </div>
-    </section>
+    </div></details>
 
-    <section class="card" aria-labelledby="h-new">
-      <h2 id="h-new"><span class="h-ic" style="--h:35">{{ icon('plus') }}</span>New from GitHub — needs details</h2>
+    <details class="card set" id="new-repos">
+      <summary class="set-sum"><span class="h-ic" style="--h:35">{{ icon('plus') }}</span><span class="set-t"><strong>New from GitHub</strong><small>Repos that still need client and hosting details</small></span>{% if new_projects %}<span class="pill pill-warn">{{ new_projects|length }} to set up</span>{% else %}<span class="pill pill-ok">All set</span>{% endif %}</summary>
+      <div class="set-body">
       {% if new_projects %}
         <p class="hint">Fill in client, hosting and the beta / live addresses so the dashboard can work with them.</p>
         <div class="rows">
@@ -79,9 +83,11 @@
         <p><strong>Repo missing on GitHub</strong> <span class="hint">— renamed or deleted? The project stays; fix its repo name in the project's Settings.</span></p>
         <div class="rows">{% for p in missing %}<a class="row row-btn" href="{{ url_for('projects.detail', project_id=p.id) }}#settings"><span class="row-main"><span class="row-title">{{ p.name }}</span><span class="row-sub mono">{{ p.github_repo }}</span></span><span class="row-side"><span class="pill pill-bad">Repo missing</span></span></a>{% endfor %}</div>
       {% endif %}
-    </section>
-      <section class="card" id="claude" aria-labelledby="h-ai">
-      <h2 id="h-ai"><span class="h-ic" style="--h:265">{{ icon('activity') }}</span>Claude (AI that makes the changes)</h2>
+    </div></details>
+      <h3 class="set-group">AI</h3>
+    <details class="card set" id="claude">
+      <summary class="set-sum"><span class="h-ic" style="--h:265">{{ icon('activity') }}</span><span class="set-t"><strong>Claude API key</strong><small>Key for projects that run on the Claude API</small></span>{% if ai_key_mask %}<span class="pill pill-ok">Key saved</span>{% else %}<span class="pill pill-muted">No key</span>{% endif %}</summary>
+      <div class="set-body">
       <p class="hint">The chat on each project sends the request to Claude with this API key. Claude works only on the change's own branch, runs the tests and pushes the branch — it can't deploy or reach any server.</p>
       <p class="hint">Spent this month: <strong>${{ "%.2f"|format(month_cost) }}</strong></p>
       <form method="post" action="{{ url_for('settings.save_claude') }}" class="form-grid">
@@ -101,10 +107,11 @@
         </div>
         <div><button class="btn btn-primary" type="submit">Save</button></div>
       </form>
-    </section>
+    </div></details>
 
-    <section class="card" id="claude-code" aria-labelledby="h-cc">
-      <h2 id="h-cc"><span class="h-ic" style="--h:285">{{ icon('activity') }}</span>Claude Code (on this server)</h2>
+    <details class="card set" id="claude-code">
+      <summary class="set-sum"><span class="h-ic" style="--h:285">{{ icon('activity') }}</span><span class="set-t"><strong>Claude Code accounts</strong><small>The Claude logins that make the changes on this server</small></span>{% if cc_accounts %}{% if cc_ok_n == cc_accounts|length %}<span class="pill pill-ok">{{ cc_ok_n }} logged in</span>{% elif cc_ok_n %}<span class="pill pill-warn">{{ cc_ok_n }} of {{ cc_accounts|length }} logged in</span>{% else %}<span class="pill pill-bad">Logged out</span>{% endif %}{% else %}<span class="pill pill-warn">No account</span>{% endif %}</summary>
+      <div class="set-body">
       <p class="hint">A second way to make changes: Claude Code runs on this server, with <strong>one ongoing session per project</strong> so it remembers earlier work. Pick it per project (project → Settings → AI engine). It works only inside the project's own copy, as a low-rights user — it can't push or deploy. It can search the web and read web pages (docs, error messages), and only for reading. Beta, client approval and Go Live stay exactly the same.</p>
       <h3>Claude accounts</h3>
       <p class="hint">Every Claude account signs in through the web — no tokens. Add as many as you like, each with its own name: in the chat you pick which account (and which of <em>its</em> models) works on a message. Each account stays logged in: the dashboard checks it every hour and renews it by itself; if one ever logs out you get an alert. The <strong>default</strong> account is pre-selected in the chat and also does the beta, release and live-steps work.</p>
@@ -203,10 +210,12 @@
         <p class="hint">Last test: <strong>{{ cc_last or "never" }}</strong> · Projects using it: <strong>{{ cc_projects|map(attribute="name")|join(", ") or "none yet" }}</strong></p>
         <form method="post" action="{{ url_for('settings.test_cc') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm" type="submit">Test Claude Code</button></form>
       </div>
-    </section>
+    </div></details>
 
-    <section class="card" id="codemagic" aria-labelledby="h-cm">
-      <h2 id="h-cm"><span class="h-ic" style="--h:150">{{ icon('upload') }}</span>Codemagic (mobile app test builds)</h2>
+    <h3 class="set-group">Builds &amp; alerts</h3>
+    <details class="card set" id="codemagic">
+      <summary class="set-sum"><span class="h-ic" style="--h:150">{{ icon('upload') }}</span><span class="set-t"><strong>Codemagic</strong><small>Builds test apps for mobile projects</small></span>{% if cm_token_mask %}<span class="pill pill-ok">Connected</span>{% else %}<span class="pill pill-muted">Optional</span>{% endif %}</summary>
+      <div class="set-body">
       <p class="hint">Builds Android test apps (APK) of a project's Flutter apps, pointed at the <strong>beta</strong> — never at live. The download link and a QR code appear on the project page.</p>
       <ol class="summary-list">
         <li>Sign up at codemagic.io with GitHub and add the project's repo (Add application → GitHub).</li>
@@ -224,10 +233,11 @@
         <p class="hint">Last test: <strong>{{ cm_last or "never" }}</strong></p>
         <form method="post" action="{{ url_for('settings.test_codemagic') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm" type="submit">Test Codemagic</button></form>
       </div>
-    </section>
+    </div></details>
 
-    <section class="card" id="telegram" aria-labelledby="h-tg">
-      <h2 id="h-tg"><span class="h-ic" style="--h:199">{{ icon('send') }}</span>Telegram alerts</h2>
+    <details class="card set" id="telegram">
+      <summary class="set-sum"><span class="h-ic" style="--h:199">{{ icon('send') }}</span><span class="set-t"><strong>Telegram alerts</strong><small>Alerts straight to your phone</small></span>{% if tg_token_mask and tg_chats %}<span class="pill pill-ok">Connected</span>{% elif tg_token_mask %}<span class="pill pill-warn">Link your chat</span>{% else %}<span class="pill pill-warn">Not set up</span>{% endif %}</summary>
+      <div class="set-body">
       <p class="hint">Site down, home page changed, sign-in locked, backup failed — straight to your phone.</p>
       <ol class="summary-list">
         <li class="{{ 'done-step' if tg_token_mask }}"><strong>Bot token</strong> — from @BotFather in Telegram.{% if tg_token_mask %} Saved: <span class="mono">{{ tg_token_mask }}</span>{% endif %}</li>
@@ -261,10 +271,12 @@
           <form method="post" action="{{ url_for('settings.telegram_test') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-primary" type="submit">{{ icon('bell') }}Send a test alert</button></form>
         {% endif %}
       {% endif %}
-    </section>
+    </div></details>
 
-    <section class="card" id="servers" aria-labelledby="h-srv">
-      <h2 id="h-srv"><span class="h-ic" style="--h:215">{{ icon('db') }}</span>Servers</h2>
+    <h3 class="set-group">Servers &amp; sites</h3>
+    <details class="card set" id="servers">
+      <summary class="set-sum"><span class="h-ic" style="--h:215">{{ icon('db') }}</span><span class="set-t"><strong>Servers</strong><small>Where the beta and live sites run</small></span>{% if servers %}<span class="pill pill-ok">{{ servers|length }} server{{ "" if servers|length == 1 else "s" }}</span>{% else %}<span class="pill pill-warn">None added</span>{% endif %}</summary>
+      <div class="set-body">
       <p class="hint">The servers your beta and live sites run on. The dashboard signs in with <strong>its own SSH key</strong> — no password is ever stored. Claude never gets this access; only the Beta deploy / Live → Beta sync buttons use it.</p>
       {% if ssh_public_key %}
         <div class="field"><label for="srv-key">1 · Add this key on each server <span class="hint">(append it to <span class="mono">~/.ssh/authorized_keys</span> of the user below)</span></label>
@@ -304,10 +316,11 @@
         <div><button class="btn btn-primary" type="submit">{{ icon('plus') }}Add server</button></div>
       </form>
       <p class="hint">3 · Press <strong>Test</strong>. The first test saves the server's identity; if it ever changes, the dashboard refuses to connect (protects against a fake server).</p>
-    </section>
+    </div></details>
 
-    <section class="card" id="monitor" aria-labelledby="h-mon">
-      <h2 id="h-mon"><span class="h-ic" style="--h:150">{{ icon('activity') }}</span>Site monitor</h2>
+    <details class="card set" id="monitor">
+      <summary class="set-sum"><span class="h-ic" style="--h:150">{{ icon('activity') }}</span><span class="set-t"><strong>Site monitor</strong><small>Opens every live site every 5 minutes</small></span>{% if watched %}<span class="pill pill-ok">Watching {{ watched|length }}</span>{% else %}<span class="pill pill-muted">Nothing watched</span>{% endif %}</summary>
+      <div class="set-body">
       <p class="hint">Every 5 minutes each watched project's live site is opened once. Down twice in a row (about 10 minutes) or the home page text changed twice in a row → red + alert. It only reads the home page; it never changes anything on the server.</p>
       <p class="hint">Last check: <strong>{{ mon_last[:16].replace("T", " ") ~ " UTC" if mon_last else "never" }}</strong> · Watching <strong>{{ watched|length }}</strong> site{{ "" if watched|length == 1 else "s" }}. Turn watching on / off in each project's Settings tab.</p>
       {% if watched %}
@@ -324,6 +337,6 @@
         </div>
       {% endif %}
       <form method="post" action="{{ url_for('settings.monitor_run') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-primary" type="submit">{{ icon('sync') }}Check all sites now</button></form>
-    </section>
+    </div></details>
   </div>
 {% endblock %}
