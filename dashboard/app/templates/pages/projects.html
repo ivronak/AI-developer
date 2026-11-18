@@ -131,27 +131,25 @@
         {% for r in rows %}{% set p = r.p %}
           <a class="pcard" href="{{ url_for('projects.detail', project_id=p.id) }}" style="--h:{{ hue(p) }}"
              data-item data-name="{{ (p.name ~ ' ' ~ p.client_name)|lower }}" data-level="{{ r.level }}" data-waiting="{{ r.waiting }}" data-open="{{ r.open }}" data-active="{{ 1 if p.is_active else 0 }}">
-            <div class="pc-band"><span class="pav{% if not p.is_active %} off{% endif %}">{{ initials(p.name) }}</span>
-              <span class="pc-id"><strong>{{ p.name }}</strong><span>{{ r.live.url.replace("https://", "") if r.live else "" }}</span></span>
+            <div class="pc-top"><span class="pav{% if not p.is_active %} off{% endif %}">{{ initials(p.name) }}</span>
+              <span class="pc-id"><strong>{{ p.name }}</strong><span>{{ r.live.url.replace("https://", "") if r.live and r.live.url else "No live address yet" }}</span></span>
               <span class="hpill s-{{ r.level }}">{{ r.label }}</span></div>
             <div class="pc-body">
+              {% if r.level != "ok" %}
+                <div class="pc-now s-{{ r.level }}">{{ icon('alert') }}<span>{{ r.reason }}<small>{{ "Open the project to roll back or debug" if r.level == "bad" else "Needs a look" }}</small></span></div>
+              {% else %}
+                <div class="pc-deploy">{{ icon('rocket') }}<span>{{ r.last_deploy.note if r.last_deploy else "No live release yet" }}</span></div>
+              {% endif %}
+              <div class="pc-meta"><span>{{ icon('branch') }}<span class="mono">{{ r.live.current_commit if r.live and r.live.current_commit else "—" }}</span></span>
+                <span>{{ icon('upload') }}{% if r.last_deploy %}Deployed {{ ago_of(r.last_deploy.created_at) }}{% else %}Never deployed{% endif %}</span></div>
               <div class="chip-row"><span class="repo">{{ icon('github') }}<span>{{ p.github_repo or "No repo yet" }}</span></span>
                 {% for t in p.tech_stack %}<span class="tech" style="--h:{{ tech_hue(t) }}">{{ t }}</span>{% endfor %}
                 {% if not p.is_active %}<span class="tag-off">Dormant</span>{% endif %}
                 {% if p.needs_setup %}<span class="pill pill-warn">Needs setup</span>{% endif %}{% if p.repo_missing %}<span class="pill pill-bad">Repo missing</span>{% endif %}</div>
-              {% if r.level != "ok" %}
-                <div class="pc-now s-{{ r.level }}">{{ icon('alert') }}<span>{{ r.reason }}<small>{{ "Open the project to roll back or debug" if r.level == "bad" else "Needs a look" }}</small></span></div>
-              {% else %}
-                <div class="pc-now">{{ icon('rocket') }}<span>{{ r.last_deploy.note if r.last_deploy else "No live release yet" }}<small>Live on <span class="mono">{{ r.live.current_commit if r.live else "—" }}</span></small></span></div>
-              {% endif %}
-              <div class="stats">
-                <div class="stat" style="--h:220"><i>{{ icon('upload') }}</i><b>{{ ago_of(r.last_deploy.created_at if r.last_deploy else None) }}</b><span>Last deploy</span></div>
-                {# HIDDEN until backups are worked on <div class="stat{% if r.backup_stale %} alarm{% endif %}" style="--h:{{ 0 if r.backup_stale else 160 }}"><i>{{ icon('db') }}</i><b>{{ r.last_backup.created_at|ago if r.last_backup else "Missing" }}</b><span>Last backup</span></div> #}
-                <div class="stat{% if not r.open %} zero{% endif %}" style="--h:265"><i>{{ icon('list') }}</i><b>{{ r.open }}</b><span>Open changes</span></div>
-                <div class="stat{% if not r.waiting %} zero{% endif %}" style="--h:215"><i>{{ icon('send') }}</i><b>{{ r.waiting }}</b><span>Waiting approval</span></div>
-              </div>
-              <div class="pc-foot"><span>{{ p.client_name }} · {{ "VPS" if p.host_type == "vps" else "cPanel" }}</span><span class="open">Open project →</span></div>
             </div>
+            <div class="pc-foot"><span class="pc-client">{{ p.client_name }} · {{ "VPS" if p.host_type == "vps" else "cPanel" }}</span>
+              <span class="pc-counts">{% if r.open or r.waiting %}{% if r.open %}<span class="cnt">{{ icon('list') }}{{ r.open }} open</span>{% endif %}{% if r.waiting %}<span class="cnt cnt-wait">{{ icon('send') }}{{ r.waiting }} waiting</span>{% endif %}{% else %}<span class="cnt-none">No open changes</span>{% endif %}</span>
+              <span class="open">Open →</span></div>
           </a>
         {% endfor %}
       </div>

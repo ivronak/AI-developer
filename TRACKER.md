@@ -221,3 +221,5 @@ Everything decided after the PRD that changes what it says. The PRD stays the ba
 - 2026-11-18 · UI refresh v4 (CSS only): long lists inside cards scroll (max 520px) so no tall empty column beside them; single user card spans the row. Checked all pages by screenshot (cost, users, claude, settings, project tabs).
 
 - 2026-11-18 · UX layer (UI only): ux.js (Ctrl/Cmd+K palette, toast close, unsaved-changes bar, KPI count-up) + v2.css hover/press/entrance motion, sent-form button spinner, view transition, skip link, empty states. Tested in a real browser on a DB copy. 524 checks.
+
+- 2026-11-18 · Project cards redesigned (UI only; Mobbin research: Vercel/Clerk/Lovable/Airtable/Emergent): name + address first, one deploy line, small status, counts + client in a footer, top accent bar by status; compact KPI tiles on phones. All data/data-* hooks kept. 524 checks.

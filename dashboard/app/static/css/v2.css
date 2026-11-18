@@ -255,3 +255,43 @@ a.repo:hover, a.chip:hover { transform: translateY(-1px); }
 /* loading placeholder (used by anything that loads after the page) */
 .skel { border-radius: 8px; background: linear-gradient(90deg, var(--surface-2) 25%, var(--line) 37%, var(--surface-2) 63%); background-size: 400% 100%; animation: skel 1.3s ease infinite; }
 @keyframes skel { from { background-position: 100% 50%; } to { background-position: 0 50%; } }
+
+/* =====================================================================
+   Project cards v2: name + address first, one line about the live release, small status, counts in the footer
+   ===================================================================== */
+a.pcard { display: flex; flex-direction: column; align-content: normal; position: relative; padding: 0; border-radius: 16px; }
+.pcard::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: hsl(var(--h) var(--solid-s) var(--solid-l)); opacity: .85; }
+.pcard[data-level="bad"]::before { background: var(--bad); }
+.pcard[data-level="warn"]::before { background: var(--warn); }
+.pcard[data-active="0"] { opacity: .78; }
+.pc-top { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 18px 18px 0; }
+.pc-top .pav { width: 42px; height: 42px; border-radius: 12px; font-size: 14px; }
+.pc-id strong { font-size: 16px; letter-spacing: -.01em; }
+.pc-top .pc-id > span { color: var(--muted); font-size: 12.5px; }
+.pcard .pc-body { display: grid; gap: 10px; padding: 14px 18px 14px; flex: 1; align-content: start; }
+.pc-deploy { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; min-width: 0; }
+.pc-deploy svg { width: 15px; height: 15px; flex: none; color: hsl(var(--h) var(--solid-s) var(--solid-l)); }
+.pc-deploy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--muted); }
+.pc-meta > span { display: inline-flex; align-items: center; gap: 5px; }
+.pc-meta svg { width: 13px; height: 13px; flex: none; }
+.pcard .pc-now { padding: 9px 12px; border-radius: var(--r-md); }
+.pcard .pc-foot { display: flex; align-items: center; gap: 10px; padding: 11px 18px; border-top: 1px solid var(--line); background: var(--surface-2); font-size: 12.5px; color: var(--muted); }
+.pc-client { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 auto; }
+.pc-counts { display: inline-flex; gap: 6px; flex: none; }
+.cnt { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 600; font-size: 12px; }
+.cnt svg { width: 12px; height: 12px; }
+.cnt-wait { background: var(--warn-soft); color: var(--warn); }
+.cnt-none { font-size: 12px; color: var(--faint); }
+.pcard .pc-foot .open { flex: none; color: var(--fg); font-weight: 600; opacity: .55; transition: opacity var(--dur-base), transform var(--dur-base) var(--ease-out); }
+.pcard:hover .pc-foot .open { opacity: 1; transform: translateX(3px); color: var(--accent); }
+.pcard:hover .pc-id strong { color: var(--accent); }
+.pc-id strong { transition: color var(--dur-fast); }
+@media (max-width: 420px) { .pcard .pc-foot { flex-wrap: wrap; } .pc-client { flex-basis: 100%; } }
+@media (max-width: 699px) {
+  .kpis .kpi { padding: 10px 12px; gap: 0 10px; }
+  .kpi-ic { width: 30px; height: 30px; }
+  .kpi-ic svg { width: 16px; height: 16px; }
+  .kpi b { font-size: 20px; }
+  .kpi span.l { font-size: 12px; }
+}
