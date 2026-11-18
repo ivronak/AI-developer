@@ -18,6 +18,28 @@
     {% if current_user.is_owner %}<button class="btn btn-primary" type="button" id="add-new" data-soon="Adding a project from the dashboard is planned for v2 (S10).">{{ icon('plus') }}Add New…</button>{% endif %}
   </div>
 
+  {% set needs_rows = rows|selectattr('level', 'ne', 'ok')|list %}{% set needs_total = needs_rows|length + pending|length %}
+  <section class="needs{% if not needs_total %} is-clear{% endif %}" aria-labelledby="h-needs">
+    {% if needs_total %}
+      <div class="needs-head"><h2 id="h-needs">Needs you now</h2><span class="needs-n">{{ needs_total }}</span></div>
+      <ul class="needs-list">
+        {% for r in needs_rows[:4] %}
+          <li class="nd-{{ r.level }}"><span class="nd-ic">{{ icon('alert') }}</span>
+            <span class="nd-t"><strong>{{ r.p.name }}</strong><span>{{ r.reason }}</span></span>
+            <a class="btn btn-sm" href="{{ url_for('projects.detail', project_id=r.p.id) }}">Open</a></li>
+        {% endfor %}
+        {% for c in pending[:3] %}{% set a = c.approval %}
+          <li class="nd-wait"><span class="nd-ic">{{ icon('send') }}</span>
+            <span class="nd-t"><strong>{{ c.project.name }}</strong><span>Waiting for the client: {{ c.title }}{% if a %} · sent {{ a.sent_at|ago }}{% endif %}</span></span>
+            <a class="btn btn-sm" href="{{ url_for('projects.detail', project_id=c.project_id) }}">Review</a></li>
+        {% endfor %}
+      </ul>
+      {% if needs_total > 7 or needs_rows|length > 4 or pending|length > 3 %}<p class="needs-more">Showing the most urgent. Use the filters below for the rest.</p>{% endif %}
+    {% else %}
+      <span class="nd-ic ok">{{ icon('check') }}</span><span><strong>All clear.</strong> Nothing needs you right now.</span>
+    {% endif %}
+  </section>
+
   {% if ai %}{% set is_low = ai.left is not none and ai.low and ai.left < ai.low %}
   <a class="ai-strip{% if is_low or ai.near %} is-warn{% endif %}" href="{{ url_for('ai_cost.index') }}" aria-label="AI cost and Anthropic balance — open the AI cost page">
     <span class="h-ic" style="--h:150">{{ icon('coin') }}</span>

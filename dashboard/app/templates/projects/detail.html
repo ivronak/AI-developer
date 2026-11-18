@@ -27,6 +27,14 @@
       <button class="btn btn-sm" type="button" {% if not owner %}disabled title="Owner only"{% elif lwhy %}data-soon="{{ lwhy }}"{% elif not rb_cur %}data-soon="There is no earlier live version to go back to."{% else %}data-open="dlg-rollback"{% endif %}>{{ icon('undo') }}<span class="lbl">Rollback</span></button>
       <button class="btn btn-sm btn-primary" type="button" {% if not owner %}disabled title="Owner only"{% elif lwhy %}data-soon="{{ lwhy }}"{% else %}data-open="dlg-golive"{% endif %}>{{ icon('rocket') }}<span class="lbl">Go Live</span></button>
     </div>
+    <dl class="facts phead-facts">
+      <div><dt>Live site</dt><dd class="fx-{{ r.level }}">{{ r.label }}<small>{{ live.url.replace("https://", "") if live and live.url else "No live address yet" }}</small></dd></div>
+      <div><dt>Last deploy</dt><dd>{{ r.last_deploy.created_at|ago if r.last_deploy else "Never" }}</dd></div>
+      <div><dt>Live commit</dt><dd class="mono">{{ live.current_commit if live and live.current_commit else "—" }}</dd></div>
+      <div><dt>Response</dt><dd>{% if live and live.last_response_ms %}{{ live.last_response_ms }} ms{% else %}—{% endif %}</dd></div>
+      <div><dt>Open changes</dt><dd class="{{ 'fx-open' if r.open }}">{{ r.open }}</dd></div>
+      <div><dt>Waiting approval</dt><dd class="{{ 'fx-wait' if r.waiting }}">{{ r.waiting }}</dd></div>
+    </dl>
   </section>
   {% if setup.first %}
     <section class="setup-card" id="setup-steps">

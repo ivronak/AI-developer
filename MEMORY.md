@@ -476,3 +476,5 @@ Big picture lives in `TRACKER.md` (status, decisions) and `CHANGES.md` (the "zer
 - 2026-11-18 · Professional skin v3 (UI only): new tokens (grayscale, ink accent, neutral hue layers) + v3.css (inset white panel on grey frame, hairline borders, KPI strip, underline tabs, neutral avatars/chips/icons, compact controls). Researched Linear / Geist / Refactoring UI / Mobbin. Rules in docs/UI-REDESIGN-PLAN.md §12 and CLAUDE.md §5. 524 checks.
 
 - 2026-11-18 · Structure v3.1 (UI only): overview and project page use main + right rail (CSS grid, p-rail aside), sidebar lists Needs attention + Recent projects with status dots, view mode remembered, highlight palette (blue next action, green Go Live, amber, red, violet waiting) for KPIs, cards, buttons, stepper, approvals, activity icons. 524 checks.
+
+- 2026-11-18 · Layout v3.2 (UI only): home = "Needs you now" queue first + compact one-line project list as default (view toggle kept), project header summary strip (live status / last deploy / commit / response / open / waiting), rail reorder. 524 checks.

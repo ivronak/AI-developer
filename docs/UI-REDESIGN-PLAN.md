@@ -135,3 +135,6 @@ Built (UI only, CSS grid + one `<aside>` wrapper + small JS):
 - Project page: left = tabs + chat; sticky right rail (320 px) = Beta, Live (living dot), live-vs-main. The rail is `<aside class="p-rail">` in detail.html.
 - Sidebar: "Needs attention" (red/amber dots) and "Recent" project links (from /projects, cached 3 min + localStorage).
 - Highlight palette (v3.css): blue = next action / in progress, green = Go Live / healthy, amber = attention, red = down, violet = waiting for the client; everything else stays grey.
+
+## 14. Layout v3.2 (2026-11-18)
+Research (Mobbin): Neon / Supabase / Braintrust project dashboards (title + URL, then a row of key metrics), Linear / Zoho / Airtable (one-line dense rows, grouped by status), Airtable / ClickUp (action queues). Built: home starts with "Needs you now" (down / attention projects + client approvals waiting, each with an Open/Review button; "All clear" when empty), duplicated attention list hidden in the Health panel, approvals panel moves first in the rail when something is pending, projects default to the compact one-line list (cards remain a toggle), project header carries a summary strip (live status, last deploy, live commit, response, open changes, waiting approval).

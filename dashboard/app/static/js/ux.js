@@ -189,6 +189,7 @@
   function rememberView() {
     var tg = document.querySelector(".view-toggle"); if (!tg) return;
     var want = null; try { want = localStorage.getItem("apd.view"); } catch (e) {}
+    if (!want) want = "list";
     if (want) { var b = tg.querySelector('[data-view="' + want + '"]'); if (b && b.getAttribute("aria-pressed") !== "true") b.click(); }
     tg.addEventListener("click", function (e) { var b = e.target.closest("[data-view]"); if (b) try { localStorage.setItem("apd.view", b.getAttribute("data-view")); } catch (err) {} });
   }

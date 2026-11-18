@@ -2,8 +2,8 @@
    Approvals tabs, and the Owner's approve / reject dialog. */
 document.addEventListener("DOMContentLoaded", function () {
   var $ = function (id) { return document.getElementById(id); };
-  var filter = "all", view = "grid";
-  try { view = localStorage.getItem("apd.view") === "list" ? "list" : "grid"; } catch (e) {}
+  var filter = "all", view = "list";
+  try { view = localStorage.getItem("apd.view") === "grid" ? "grid" : "list"; } catch (e) {}
 
   var TESTS = {
     all: function () { return true; },
